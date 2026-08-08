@@ -1,0 +1,53 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ai_interview_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ai_interview_qdrant
+    ports:
+      # host:container — Qdrant listens on 6333 (HTTP/dashboard) and 6334 (gRPC)
+      # inside the container; we expose them on 6533/6534 on the host.
+      - "6533:6333"
+      - "6534:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  backend:
+    build: .
+    container_name: ai_interview_backend
+    env_file:
+      - .env
+    environment:
+      # Using the local (host) PostgreSQL instead of a container.
+      POSTGRES_HOST: host.docker.internal
+      REDIS_HOST: redis
+      QDRANT_HOST: qdrant
+      # Inside the compose network Qdrant is reached on its internal port 6333,
+      # not the host-mapped 6533.
+      QDRANT_PORT: 6333
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+volumes:
+  redis_data:
+  qdrant_data:

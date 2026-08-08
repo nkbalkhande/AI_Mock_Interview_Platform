@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────
+# Cursor editor files (rules, skills, local config)
+# ─────────────────────────────────────────────
+.cursor/
+
+# ─────────────────────────────────────────────
+# Environment / secrets (keep *.example templates tracked)
+# ─────────────────────────────────────────────
+.env
+.env.*
+*.local
+!.env.example
+!.env*.example
+
+# ─────────────────────────────────────────────
+# Python
+# ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ─────────────────────────────────────────────
+# Node / frontend
+# ─────────────────────────────────────────────
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# ─────────────────────────────────────────────
+# Logs
+# ─────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ─────────────────────────────────────────────
+# IDE / OS
+# ─────────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

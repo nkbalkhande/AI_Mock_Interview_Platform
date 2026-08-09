@@ -1,4 +1,4 @@
-import { ROLE, type Role } from "@/lib/constants";
+import { ROLE, ROUTES, type Role } from "@/lib/constants";
 
 /**
  * Minimal auth session shape shared across the app. The real token handling
@@ -26,4 +26,19 @@ export function isAdmin(user: SessionUser | null): boolean {
 
 export function isCandidate(user: SessionUser | null): boolean {
   return hasRole(user, ROLE.CANDIDATE);
+}
+
+const ELEVATED_ROLES: readonly string[] = [
+  ROLE.ADMIN,
+  ROLE.SUPER_ADMIN,
+  ROLE.INTERVIEWER,
+];
+
+/**
+ * Post-login landing page based on RBAC roles: admins/interviewers go to the
+ * admin dashboard, everyone else to the candidate dashboard.
+ */
+export function dashboardPathForRoles(roles: readonly string[]): string {
+  const elevated = roles?.some((r) => ELEVATED_ROLES.includes(r));
+  return elevated ? ROUTES.admin.dashboard : ROUTES.candidate.dashboard;
 }

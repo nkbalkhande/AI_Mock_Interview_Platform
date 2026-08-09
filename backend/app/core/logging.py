@@ -34,8 +34,11 @@ def configure_logging() -> None:
     root.handlers.clear()
     root.addHandler(handler)
 
-    # Tame noisy third-party loggers.
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # Show per-request access logs in development so API calls are visible;
+    # keep them quiet in production to avoid noise.
+    logging.getLogger("uvicorn.access").setLevel(
+        logging.INFO if settings.DEBUG else logging.WARNING
+    )
     logging.getLogger("sqlalchemy.engine").setLevel(
         logging.INFO if settings.DB_ECHO else logging.WARNING
     )

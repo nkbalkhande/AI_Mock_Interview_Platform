@@ -19,14 +19,14 @@ export const ROUTES = {
     profile: "/profile",
   },
   admin: {
-    dashboard: "/dashboard",
-    users: "/users",
-    interviews: "/interviews",
-    assign: "/interviews/assign",
-    evaluations: "/evaluations",
-    roles: "/roles",
-    notifications: "/notifications",
-    profile: "/profile",
+    dashboard: "/admin/dashboard",
+    users: "/admin/users",
+    interviews: "/admin/interviews",
+    assign: "/admin/interviews/assign",
+    evaluations: "/admin/evaluations",
+    roles: "/admin/roles",
+    notifications: "/admin/notifications",
+    profile: "/admin/profile",
   },
 } as const;
 

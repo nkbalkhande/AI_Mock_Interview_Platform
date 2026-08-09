@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.database import dispose_engine
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.services.resumes.resume_vector_store import ResumeVectorStore
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,10 @@ logger = get_logger(__name__)
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging()
     logger.info("Starting %s (env=%s)", settings.APP_NAME, settings.APP_ENV)
+    try:
+        ResumeVectorStore().ensure_collection()
+    except Exception:  # noqa: BLE001 - Qdrant being down must not block boot
+        logger.exception("Could not ensure Qdrant resume collection on startup")
     yield
     logger.info("Shutting down %s", settings.APP_NAME)
     await dispose_engine()

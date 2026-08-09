@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6533
     QDRANT_API_KEY: str | None = None
+    # Single shared collection for every candidate's resume chunks (AD-16).
+    # Multi-tenancy is payload-based (user_id / resume_version_id), never a
+    # collection-per-user — that doesn't scale in Qdrant.
+    QDRANT_RESUME_COLLECTION: str = "resume_chunks"
 
     # Security / JWT
     JWT_SECRET_KEY: str = "change-me-in-production"

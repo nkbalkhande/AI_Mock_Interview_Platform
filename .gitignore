@@ -4,6 +4,13 @@
 .cursor/
 
 # ─────────────────────────────────────────────
+# BMAD / agent tooling (local workflow config)
+# ─────────────────────────────────────────────
+.agents/
+_bmad/
+_bmad-output/
+
+# ─────────────────────────────────────────────
 # Environment / secrets (keep *.example templates tracked)
 # ─────────────────────────────────────────────
 .env
@@ -43,6 +50,12 @@ node_modules/
 .next/
 out/
 *.tsbuildinfo
+
+# ─────────────────────────────────────────────
+# Uploaded files / local object storage (STORAGE_ROOT)
+# ─────────────────────────────────────────────
+storage/
+backend/storage/
 
 # ─────────────────────────────────────────────
 # Logs

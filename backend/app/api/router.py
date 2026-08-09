@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.api.v1.auth.router import router as auth_router
+
 api_router = APIRouter()
 
 
@@ -17,6 +19,7 @@ async def ping() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# Domain routers are included here as they come online, e.g.:
-# from app.api.v1.auth.router import router as auth_router
-# api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+# Additional domain routers are included here as they come online
+# (users, resumes, interviews, ...).

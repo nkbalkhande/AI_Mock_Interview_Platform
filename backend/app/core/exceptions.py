@@ -8,6 +8,7 @@ translate them into consistent JSON error responses at the API boundary.
 from __future__ import annotations
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -77,6 +78,36 @@ def register_exception_handlers(app: FastAPI) -> None:
                     "code": exc.error_code,
                     "message": exc.message,
                     "details": exc.details,
+                }
+            },
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def _handle_request_validation(
+        _: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Return clean 422s for request-parsing/validation errors.
+
+        FastAPI's default handler runs ``jsonable_encoder`` over the raw errors,
+        whose ``input`` field can hold non-UTF-8 bytes (e.g. uploaded images),
+        crashing with a ``UnicodeDecodeError``. We keep only JSON-safe fields
+        (``type``/``loc``/``msg``) so binary upload contents are never encoded.
+        """
+        details = [
+            {
+                "type": err.get("type"),
+                "loc": [str(part) for part in err.get("loc", ())],
+                "msg": err.get("msg"),
+            }
+            for err in exc.errors()
+        ]
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "error": {
+                    "code": "validation_error",
+                    "message": "Validation failed.",
+                    "details": details,
                 }
             },
         )

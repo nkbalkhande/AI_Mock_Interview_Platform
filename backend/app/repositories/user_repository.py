@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -24,5 +26,21 @@ class UserRepository(BaseRepository[User]):
             .where(func.lower(User.email) == email.strip().lower())
             .options(selectinload(User.user_roles).selectinload(UserRole.role))
         )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_id_with_roles(
+        self, user_id: uuid.UUID, *, with_profile: bool = False
+    ) -> User | None:
+        """Fetch a user by id with roles (and optionally profile) eager-loaded.
+
+        Used by the auth dependency so route handlers get a ``User`` whose
+        ``user_roles[].role.name`` is already populated for RBAC checks
+        without triggering lazy-load queries inside request handling.
+        """
+        options = [selectinload(User.user_roles).selectinload(UserRole.role)]
+        if with_profile:
+            options.append(selectinload(User.profile))
+        stmt = select(User).where(User.id == user_id).options(*options)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

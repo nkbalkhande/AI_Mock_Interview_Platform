@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -25,6 +25,36 @@ import { dashboardPathForRoles } from "@/lib/auth";
 import { ROUTES } from "@/lib/constants";
 
 export default function LoginPage() {
+  // Next 16 requires ``useSearchParams`` to sit inside a Suspense boundary so
+  // the surrounding page can be pre-rendered statically. Wrapping the inner
+  // form (which reads ``?redirect=``) keeps the static shell while deferring
+  // the client-only search-param read to hydration.
+  return (
+    <Suspense fallback={<LoginFallback />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginFallback() {
+  return (
+    <div className="relative mx-auto w-full max-w-md">
+      <Card className="border-border bg-card/80 shadow-sm backdrop-blur-xl">
+        <CardHeader>
+          <CardTitle className="text-xl">Sign in</CardTitle>
+          <CardDescription>Loading…</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-6 text-muted-foreground">
+            <Loader2 className="animate-spin" />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const login = useLogin();

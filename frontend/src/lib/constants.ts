@@ -14,8 +14,15 @@ export const ROUTES = {
   candidate: {
     dashboard: "/dashboard",
     interviews: "/interviews",
+    interviewsJdBased: "/interviews/jd-based",
+    interviewsRoleBased: "/interviews/role-based",
     upcoming: "/upcoming-interviews",
     results: "/results",
+    practiceResult: (sessionId: string) =>
+      `/results/practice/${sessionId}`,
+    assignedResult: (sessionId: string) =>
+      `/results/assigned/${sessionId}`,
+    interview: (sessionId: string) => `/interview/${sessionId}`,
     profile: "/profile",
   },
   admin: {

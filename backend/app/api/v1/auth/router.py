@@ -25,6 +25,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
+from app.api.dependencies.auth import get_current_user
 from app.api.dependencies.database import get_db
 from app.api.dependencies.storage import get_storage_service
 from app.api.v1.auth.schemas import (
@@ -33,6 +34,7 @@ from app.api.v1.auth.schemas import (
     LoginResponse,
     RegisterRequest,
 )
+from app.models.user import User
 from app.core.config import settings
 from app.core.exceptions import ValidationError
 from app.services.auth.auth_service import (
@@ -97,6 +99,40 @@ def _build_auth_response(result: AuthenticatedUser) -> LoginResponse:
             roles=roles,
         )
     )
+
+
+@router.get("/me", response_model=AuthUser)
+async def me(current_user: User = Depends(get_current_user)) -> AuthUser:
+    """Return the currently authenticated user's identity.
+
+    Used by the frontend on app boot / page refresh to rehydrate its client
+    auth store from the httpOnly ``session`` cookie (JS can't read the cookie
+    itself). Returns 401 through the auth dependency when no valid session
+    is present.
+    """
+    roles = [ur.role.name for ur in current_user.user_roles if ur.role is not None]
+    return AuthUser(
+        id=current_user.id,
+        full_name=current_user.full_name,
+        email=current_user.email,
+        roles=roles,
+    )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(response: Response) -> Response:
+    """Clear the auth cookies. Idempotent; no session lookup required.
+
+    Deleting the cookies is enough for the browser to lose access; the
+    matching refresh-token row can be revoked separately later — this is
+    the pragmatic MVP behavior and matches how the login flow only sets
+    cookies (no server-side session state to invalidate).
+    """
+    common = {"path": "/", "httponly": True, "samesite": "lax"}
+    response.delete_cookie(ACCESS_COOKIE_NAME, **common)
+    response.delete_cookie(REFRESH_COOKIE_NAME, **common)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 @router.post("/login", response_model=LoginResponse)

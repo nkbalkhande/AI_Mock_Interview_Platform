@@ -1,3 +1,115 @@
+"use client";
+
+import { Bell } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useNotifications } from "@/features/notifications/hooks";
+import { formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
+
+const MAX_BELL_ITEMS = 5;
+
+/**
+ * Header notification bell.
+ *
+ * Fetches the current user's most recent notifications (all + unread count)
+ * and shows a compact list in a dropdown. Unread items are visually
+ * distinguished — no "mark as read" action wired yet (out of scope for the
+ * dashboard task; will land with the notification-management feature).
+ */
 export function NotificationBell() {
-  return null;
+  const { data, isLoading, isError } = useNotifications({ limit: MAX_BELL_ITEMS });
+  const unread = data?.unread_count ?? 0;
+  const items = data?.items ?? [];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Notifications${unread > 0 ? ` (${unread} unread)` : ""}`}
+          className="relative"
+        >
+          <Bell />
+          {unread > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-white"
+            >
+              {unread > 9 ? "9+" : unread}
+            </span>
+          ) : null}
+        </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="w-80 p-0">
+        <DropdownMenuLabel className="flex items-center justify-between px-3 py-2">
+          <span className="text-sm font-semibold text-foreground">
+            Notifications
+          </span>
+          {unread > 0 ? (
+            <Badge variant="default">{unread} new</Badge>
+          ) : null}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator className="m-0" />
+
+        <div className="max-h-80 overflow-y-auto">
+          {isLoading ? (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+              Loading…
+            </div>
+          ) : isError ? (
+            <div className="px-3 py-6 text-center text-sm text-destructive">
+              Couldn't load notifications.
+            </div>
+          ) : items.length === 0 ? (
+            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+              You're all caught up.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {items.map((n) => (
+                <li
+                  key={n.id}
+                  className={cn(
+                    "px-3 py-3 text-sm",
+                    !n.is_read && "bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
+                        {n.title}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                        {n.message}
+                      </p>
+                    </div>
+                    {!n.is_read ? (
+                      <span
+                        aria-hidden="true"
+                        className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary"
+                      />
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {formatDateTime(n.created_at)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }

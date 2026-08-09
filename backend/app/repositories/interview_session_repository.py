@@ -1,0 +1,174 @@
+"""Repository for ``interview_sessions`` (candidate-scoped reads)."""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Sequence
+from decimal import Decimal
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
+
+from app.models.interview import Interview
+from app.models.interview_evaluation import InterviewEvaluation
+from app.models.interview_question import InterviewQuestion
+from app.models.interview_session import InterviewSession
+from app.repositories.base import BaseRepository
+
+
+class InterviewSessionRepository(BaseRepository[InterviewSession]):
+    model = InterviewSession
+
+    async def get_owned_by_candidate(
+        self,
+        session_id: uuid.UUID,
+        candidate_id: uuid.UUID,
+    ) -> InterviewSession | None:
+        """Load a session only if its interview belongs to ``candidate_id``.
+
+        Eager-loads the parent interview (needed for JD/resume context inside
+        the lifecycle service) and the session's questions with their answers
+        (needed to render "session state" without a second round-trip). Returns
+        ``None`` when the row is missing OR belongs to a different candidate,
+        so callers can respond with a uniform 404 that never confirms whether
+        another user's session exists.
+        """
+        stmt = (
+            select(InterviewSession)
+            .join(Interview, InterviewSession.interview_id == Interview.id)
+            .where(
+                InterviewSession.id == session_id,
+                Interview.candidate_id == candidate_id,
+            )
+            .options(
+                selectinload(InterviewSession.interview),
+                selectinload(InterviewSession.questions).selectinload(
+                    InterviewQuestion.answer
+                ),
+                selectinload(InterviewSession.evaluations),
+                selectinload(InterviewSession.skill_scores),
+            )
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def get_owned_for_update(
+        self,
+        session_id: uuid.UUID,
+        candidate_id: uuid.UUID,
+    ) -> InterviewSession | None:
+        """Ownership-scoped session load with a transaction row lock.
+
+        Answer advancement and submit claiming must be serialized so two
+        concurrent retries cannot generate duplicate questions or schedule
+        duplicate evaluations.
+        """
+        stmt = (
+            select(InterviewSession)
+            .join(Interview, InterviewSession.interview_id == Interview.id)
+            .where(
+                InterviewSession.id == session_id,
+                Interview.candidate_id == candidate_id,
+            )
+            .options(
+                selectinload(InterviewSession.interview),
+                selectinload(InterviewSession.questions).selectinload(
+                    InterviewQuestion.answer
+                ),
+                selectinload(InterviewSession.evaluations),
+                selectinload(InterviewSession.skill_scores),
+            )
+            .with_for_update(of=InterviewSession)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def average_practice_final_score(
+        self, candidate_id: uuid.UUID
+    ) -> Decimal | None:
+        """Average of FINAL ``overall_score`` for the candidate's practice sessions.
+
+        Practice-only per the product decision: this powers the "Average Score"
+        dashboard tile as a **learning-progress** signal, so assigned-interview
+        AI scores (which feed the admin decision, not the candidate's growth)
+        are deliberately excluded.
+        """
+        stmt = (
+            select(func.avg(InterviewEvaluation.overall_score))
+            .select_from(InterviewEvaluation)
+            .join(
+                InterviewSession,
+                InterviewEvaluation.session_id == InterviewSession.id,
+            )
+            .join(Interview, InterviewSession.interview_id == Interview.id)
+            .where(
+                Interview.candidate_id == candidate_id,
+                Interview.interview_type == "PRACTICE",
+                InterviewEvaluation.evaluation_type == "FINAL",
+                InterviewEvaluation.overall_score.is_not(None),
+            )
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def latest_final_evaluation_for_interviews(
+        self, interview_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, InterviewEvaluation]:
+        """Return ``interview_id -> FINAL evaluation`` for the given interviews.
+
+        Uses the latest session per interview (highest ``attempt_number``); the
+        FINAL evaluation on that session is what "the result" of the interview
+        refers to. Sessions without a FINAL row are omitted from the map so
+        callers can distinguish "in review" from "evaluated".
+        """
+        if not interview_ids:
+            return {}
+
+        # Sessions with a FINAL evaluation, eager-loaded so the caller doesn't
+        # trigger extra queries when rendering summaries.
+        stmt = (
+            select(InterviewSession)
+            .where(InterviewSession.interview_id.in_(interview_ids))
+            .options(selectinload(InterviewSession.evaluations))
+            .order_by(
+                InterviewSession.interview_id,
+                InterviewSession.attempt_number.desc(),
+            )
+        )
+        result = await self.session.execute(stmt)
+
+        latest_per_interview: dict[uuid.UUID, InterviewSession] = {}
+        for session in result.scalars().all():
+            latest_per_interview.setdefault(session.interview_id, session)
+
+        finals: dict[uuid.UUID, InterviewEvaluation] = {}
+        for interview_id, session in latest_per_interview.items():
+            final = next(
+                (
+                    ev
+                    for ev in session.evaluations
+                    if ev.evaluation_type == "FINAL"
+                ),
+                None,
+            )
+            if final is not None:
+                finals[interview_id] = final
+        return finals
+
+    async def latest_session_by_interview(
+        self, interview_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, InterviewSession]:
+        """Return the highest-attempt session for each interview id."""
+        if not interview_ids:
+            return {}
+        stmt = (
+            select(InterviewSession)
+            .where(InterviewSession.interview_id.in_(interview_ids))
+            .options(selectinload(InterviewSession.final_decision))
+            .order_by(
+                InterviewSession.interview_id,
+                InterviewSession.attempt_number.desc(),
+            )
+        )
+        result = await self.session.execute(stmt)
+        latest: dict[uuid.UUID, InterviewSession] = {}
+        for session in result.scalars().all():
+            latest.setdefault(session.interview_id, session)
+        return latest

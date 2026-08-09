@@ -1,0 +1,126 @@
+"""Response schemas for the candidate dashboard API.
+
+Kept as plain DTOs (``BaseModel``) rather than SQLAlchemy-mapped read models
+so the wire shape can diverge from the ORM without breaking clients — the
+dashboard aggregates data from six tables into three response envelopes,
+so a hand-rolled DTO layer is the right seam.
+
+Field naming stays ``snake_case`` to match the auth API (client-side mapping
+to ``camelCase`` happens in the frontend feature module, consistent with
+``features/auth``).
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class CandidateProfileSummary(BaseModel):
+    """Minimal profile fields the dashboard header uses (name + avatar)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
+    email: str
+    current_designation: str | None = None
+    current_organization: str | None = None
+    years_of_experience: Decimal | None = None
+    profile_photo_path: str | None = None
+
+
+class DashboardStats(BaseModel):
+    """Aggregate counts + score shown as tiles at the top of the dashboard."""
+
+    practice_interviews: int = Field(ge=0)
+    upcoming_interviews: int = Field(ge=0)
+    completed_interviews: int = Field(ge=0)
+    average_practice_score: Decimal | None = Field(
+        default=None,
+        description=(
+            "Average FINAL overall_score across PRACTICE interviews only "
+            "(0-10 scale). Null when the candidate has no evaluated practice "
+            "runs yet."
+        ),
+    )
+
+
+class DashboardResponse(BaseModel):
+    profile: CandidateProfileSummary
+    stats: DashboardStats
+
+
+class UpcomingInterview(BaseModel):
+    """Single row in the Upcoming Interviews section."""
+
+    id: uuid.UUID
+    role: str | None = Field(
+        default=None, description="Snapshotted role name at assignment time."
+    )
+    organization: str | None = Field(
+        default=None,
+        description=(
+            "Assigning organization if known. Derived from the assigning "
+            "admin's ``current_organization`` where available."
+        ),
+    )
+    job_description: str | None = None
+    required_experience_min: Decimal | None = None
+    required_experience_max: Decimal | None = None
+    scheduled_at: datetime | None = None
+    timezone: str | None = None
+    duration_minutes: int
+    status: str
+    access_state: str = Field(
+        description=(
+            "PENDING before access_start_at, OPEN inside the window, "
+            "CLOSED after access_end_at. Frontend uses this to decide "
+            "whether to render the [Join Interview] CTA."
+        )
+    )
+    access_start_at: datetime | None = None
+    access_end_at: datetime | None = None
+
+
+class UpcomingInterviewsResponse(BaseModel):
+    items: list[UpcomingInterview]
+
+
+class PracticeResultSummary(BaseModel):
+    """Compact summary of a completed PRACTICE interview."""
+
+    interview_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+    role: str | None = None
+    completed_at: datetime | None = None
+    overall_score: Decimal | None = None
+    technical_score: Decimal | None = None
+    communication_score: Decimal | None = None
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+
+
+class AssignedResultSummary(BaseModel):
+    """Compact summary of a completed ASSIGNED interview."""
+
+    interview_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+    role: str | None = None
+    completed_at: datetime | None = None
+    ai_overall_score: Decimal | None = None
+    ai_verdict: str | None = None
+    admin_decision: str | None = None
+    admin_feedback: str | None = None
+    result_published_at: datetime | None = None
+
+
+class RecentResultsResponse(BaseModel):
+    """Recent results split by interview type so the frontend can render each
+    section without re-partitioning the list."""
+
+    practice: list[PracticeResultSummary]
+    assigned: list[AssignedResultSummary]

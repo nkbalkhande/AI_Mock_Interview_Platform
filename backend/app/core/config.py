@@ -72,6 +72,15 @@ class Settings(BaseSettings):
     AZURE_OPENAI_ENDPOINT: str | None = None
     AZURE_OPENAI_API_VERSION: str = "2024-08-01-preview"
     AZURE_OPENAI_DEPLOYMENT: str | None = None
+    # Slightly cooler than default (1.0) — question-planner and evaluator want
+    # variety but not wild swings. Individual callers can override per-call.
+    LLM_TEMPERATURE: float = 0.4
+    # Cap so a runaway LLM response can't burn tokens. JSON responses for the
+    # planner + evaluator comfortably fit inside 2000.
+    LLM_MAX_OUTPUT_TOKENS: int = 2000
+    # Request timeout (seconds) for a single chat completion. Kept modest so a
+    # stuck upstream never wedges a request handler.
+    LLM_REQUEST_TIMEOUT_SECONDS: float = 45.0
 
     # Embeddings (text-embedding-3-small -> 1536 dimensions).
     # EMBEDDING_DIMENSIONS must match the Qdrant collection's vector size.

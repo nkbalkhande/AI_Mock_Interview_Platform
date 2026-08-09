@@ -1,6 +1,6 @@
 import { apiClient } from "@/lib/api-client";
 
-import type { LoginInput, LoginResponse, RegisterInput } from "./types";
+import type { AuthUser, LoginInput, LoginResponse, RegisterInput } from "./types";
 
 /**
  * POST /auth/login — verifies credentials. On success the backend sets httpOnly
@@ -37,4 +37,23 @@ export async function register(input: RegisterInput): Promise<LoginResponse> {
     headers: { "Content-Type": undefined },
   });
   return data;
+}
+
+/**
+ * GET /auth/me — resolve the current user from the httpOnly session cookie.
+ *
+ * Used on app boot / page refresh to rehydrate the client auth store; JS
+ * can't read the cookie itself, so we ask the backend who we are.
+ */
+export async function getMe(): Promise<AuthUser> {
+  const { data } = await apiClient.get<AuthUser>("/auth/me");
+  return data;
+}
+
+/**
+ * POST /auth/logout — clear auth cookies. Idempotent; returns 204 on success.
+ * The API returns no body, so we don't try to parse one.
+ */
+export async function logout(): Promise<void> {
+  await apiClient.post("/auth/logout");
 }

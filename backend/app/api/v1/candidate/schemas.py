@@ -90,6 +90,32 @@ class UpcomingInterviewsResponse(BaseModel):
     items: list[UpcomingInterview]
 
 
+class UpcomingInterviewDetail(BaseModel):
+    """Full details for a single assigned interview the candidate is about to join."""
+
+    id: uuid.UUID
+    role: str | None = None
+    organization: str | None = None
+    job_description: str | None = None
+    required_experience_min: Decimal | None = None
+    required_experience_max: Decimal | None = None
+    scheduled_at: datetime | None = None
+    timezone: str | None = None
+    duration_minutes: int
+    status: str
+    access_state: str
+    access_start_at: datetime | None = None
+    access_end_at: datetime | None = None
+    instructions: str | None = Field(
+        default=None,
+        description="Admin-provided instructions/notes for the candidate.",
+    )
+    assigned_by_name: str | None = Field(
+        default=None,
+        description="Full name of the admin/interviewer who assigned this interview.",
+    )
+
+
 class PracticeResultSummary(BaseModel):
     """Compact summary of a completed PRACTICE interview."""
 
@@ -124,3 +150,57 @@ class RecentResultsResponse(BaseModel):
 
     practice: list[PracticeResultSummary]
     assigned: list[AssignedResultSummary]
+
+
+class PracticeResultListItem(BaseModel):
+    """Row in the full practice results list (richer than dashboard summary)."""
+
+    interview_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+    practice_type: str | None = Field(
+        default=None, description="JD_BASED or ROLE_BASED"
+    )
+    role: str | None = None
+    duration_minutes: int | None = None
+    completed_at: datetime | None = None
+    overall_score: Decimal | None = None
+    technical_score: Decimal | None = None
+    communication_score: Decimal | None = None
+    reasoning_score: Decimal | None = None
+    project_knowledge_score: Decimal | None = None
+    ai_verdict: str | None = None
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+
+
+class PracticeResultListResponse(BaseModel):
+    """Paginated list of all practice results."""
+
+    items: list[PracticeResultListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class AssignedResultListItem(BaseModel):
+    """Row in the full assigned results list."""
+
+    interview_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+    role: str | None = None
+    duration_minutes: int | None = None
+    completed_at: datetime | None = None
+    ai_overall_score: Decimal | None = None
+    ai_verdict: str | None = None
+    admin_decision: str | None = None
+    admin_feedback: str | None = None
+    result_published_at: datetime | None = None
+
+
+class AssignedResultListResponse(BaseModel):
+    """Paginated list of all assigned results."""
+
+    items: list[AssignedResultListItem]
+    total: int
+    page: int
+    page_size: int

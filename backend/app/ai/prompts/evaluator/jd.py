@@ -6,7 +6,7 @@ candidate demonstrated sufficient capability for THAT specific JD.
 """
 
 from app.ai.prompts.base import PromptTemplate
-from app.ai.prompts.evaluator_base import (
+from app.ai.prompts.evaluator.base import (
     SHARED_EVALUATION_PRINCIPLES,
     SHARED_OUTPUT_SCHEMA,
     SHARED_SCORING_AND_VERDICT,

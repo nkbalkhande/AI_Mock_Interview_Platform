@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,22 +11,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useNotifications } from "@/features/notifications/hooks";
+import {
+  useMarkAllRead,
+  useNotifications,
+} from "@/features/notifications/hooks";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const MAX_BELL_ITEMS = 5;
 
-/**
- * Header notification bell.
- *
- * Fetches the current user's most recent notifications (all + unread count)
- * and shows a compact list in a dropdown. Unread items are visually
- * distinguished — no "mark as read" action wired yet (out of scope for the
- * dashboard task; will land with the notification-management feature).
- */
 export function NotificationBell() {
   const { data, isLoading, isError } = useNotifications({ limit: MAX_BELL_ITEMS });
+  const markAll = useMarkAllRead();
   const unread = data?.unread_count ?? 0;
   const items = data?.items ?? [];
 
@@ -57,7 +53,15 @@ export function NotificationBell() {
             Notifications
           </span>
           {unread > 0 ? (
-            <Badge variant="default">{unread} new</Badge>
+            <button
+              type="button"
+              onClick={() => markAll.mutate()}
+              disabled={markAll.isPending}
+              className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 disabled:opacity-50"
+            >
+              <CheckCheck className="h-3.5 w-3.5" />
+              Mark all read
+            </button>
           ) : null}
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="m-0" />

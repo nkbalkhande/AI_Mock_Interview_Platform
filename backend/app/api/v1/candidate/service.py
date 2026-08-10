@@ -14,13 +14,18 @@ from collections.abc import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.candidate.schemas import (
+    AssignedResultListItem,
+    AssignedResultListResponse,
     AssignedResultSummary,
     CandidateProfileSummary,
     DashboardResponse,
     DashboardStats,
+    PracticeResultListItem,
+    PracticeResultListResponse,
     PracticeResultSummary,
     RecentResultsResponse,
     UpcomingInterview,
+    UpcomingInterviewDetail,
     UpcomingInterviewsResponse,
 )
 from app.models.interview import Interview
@@ -101,6 +106,39 @@ class CandidateDashboardService:
         items = [self._to_upcoming(row) for row in rows]
         return UpcomingInterviewsResponse(items=items)
 
+    async def get_upcoming_interview_detail(
+        self, candidate: User, interview_id: uuid.UUID
+    ) -> UpcomingInterviewDetail | None:
+        """Fetch full details for one assigned interview owned by this candidate."""
+        interview = await self.interviews.get_owned_by_candidate(
+            interview_id, candidate.id
+        )
+        if interview is None:
+            return None
+        if interview.interview_type != "ASSIGNED":
+            return None
+        return UpcomingInterviewDetail(
+            id=interview.id,
+            role=interview.role_name_snapshot,
+            organization=None,
+            job_description=interview.job_description_snapshot,
+            required_experience_min=interview.required_experience_min,
+            required_experience_max=interview.required_experience_max,
+            scheduled_at=interview.scheduled_at,
+            timezone=interview.timezone,
+            duration_minutes=interview.duration_minutes,
+            status=interview.status,
+            access_state=access_state(interview).value,
+            access_start_at=interview.access_start_at,
+            access_end_at=interview.access_end_at,
+            instructions=interview.instructions,
+            assigned_by_name=(
+                interview.assigned_by_user.full_name
+                if interview.assigned_by_user
+                else None
+            ),
+        )
+
     async def get_recent_results(
         self, candidate: User, *, limit_per_type: int = 5
     ) -> RecentResultsResponse:
@@ -114,6 +152,36 @@ class CandidateDashboardService:
         practice = await self._summarise_practice(practice_rows)
         assigned = await self._summarise_assigned(assigned_rows)
         return RecentResultsResponse(practice=practice, assigned=assigned)
+
+    async def get_practice_results(
+        self, candidate: User, *, page: int = 1, page_size: int = 20
+    ) -> PracticeResultListResponse:
+        """Paginated list of all completed practice results."""
+        total = await self.interviews.count_completed_by_type(
+            candidate.id, interview_type="PRACTICE"
+        )
+        rows = await self.interviews.list_completed_paginated(
+            candidate.id, interview_type="PRACTICE", page=page, page_size=page_size
+        )
+        items = await self._build_practice_list_items(rows)
+        return PracticeResultListResponse(
+            items=items, total=total, page=page, page_size=page_size
+        )
+
+    async def get_assigned_results(
+        self, candidate: User, *, page: int = 1, page_size: int = 20
+    ) -> AssignedResultListResponse:
+        """Paginated list of all completed assigned results."""
+        total = await self.interviews.count_completed_by_type(
+            candidate.id, interview_type="ASSIGNED"
+        )
+        rows = await self.interviews.list_completed_paginated(
+            candidate.id, interview_type="ASSIGNED", page=page, page_size=page_size
+        )
+        items = await self._build_assigned_list_items(rows)
+        return AssignedResultListResponse(
+            items=items, total=total, page=page, page_size=page_size
+        )
 
     # ---- private helpers ------------------------------------------------
 
@@ -211,3 +279,88 @@ class CandidateDashboardService:
                 )
             )
         return summaries
+
+    async def _build_practice_list_items(
+        self, interviews: Sequence[Interview]
+    ) -> list[PracticeResultListItem]:
+        if not interviews:
+            return []
+        ids = [i.id for i in interviews]
+        finals = await self.sessions.latest_final_evaluation_for_interviews(ids)
+        latest_sessions = await self.sessions.latest_session_by_interview(ids)
+
+        items: list[PracticeResultListItem] = []
+        for interview in interviews:
+            evaluation: InterviewEvaluation | None = finals.get(interview.id)
+            session: InterviewSession | None = latest_sessions.get(interview.id)
+            items.append(
+                PracticeResultListItem(
+                    interview_id=interview.id,
+                    session_id=session.id if session else None,
+                    practice_type=interview.practice_type,
+                    role=interview.role_name_snapshot,
+                    duration_minutes=interview.duration_minutes,
+                    completed_at=(session.ended_at if session else None)
+                    or interview.updated_at,
+                    overall_score=(
+                        evaluation.overall_score if evaluation else None
+                    ),
+                    technical_score=(
+                        evaluation.technical_score if evaluation else None
+                    ),
+                    communication_score=(
+                        evaluation.communication_score if evaluation else None
+                    ),
+                    reasoning_score=(
+                        evaluation.reasoning_score if evaluation else None
+                    ),
+                    project_knowledge_score=None,
+                    ai_verdict=(
+                        evaluation.ai_verdict if evaluation else None
+                    ),
+                    strengths=_coerce_str_list(
+                        evaluation.strengths if evaluation else []
+                    ),
+                    weaknesses=_coerce_str_list(
+                        evaluation.weaknesses if evaluation else []
+                    ),
+                )
+            )
+        return items
+
+    async def _build_assigned_list_items(
+        self, interviews: Sequence[Interview]
+    ) -> list[AssignedResultListItem]:
+        if not interviews:
+            return []
+        ids = [i.id for i in interviews]
+        latest_sessions = await self.sessions.latest_session_by_interview(ids)
+
+        items: list[AssignedResultListItem] = []
+        for interview in interviews:
+            session: InterviewSession | None = latest_sessions.get(interview.id)
+            decision = session.final_decision if session else None
+            items.append(
+                AssignedResultListItem(
+                    interview_id=interview.id,
+                    session_id=session.id if session else None,
+                    role=interview.role_name_snapshot,
+                    duration_minutes=interview.duration_minutes,
+                    completed_at=(session.ended_at if session else None)
+                    or interview.updated_at,
+                    ai_overall_score=(
+                        decision.ai_overall_score if decision else None
+                    ),
+                    ai_verdict=decision.ai_verdict if decision else None,
+                    admin_decision=(
+                        decision.admin_decision if decision else None
+                    ),
+                    admin_feedback=(
+                        decision.admin_feedback if decision else None
+                    ),
+                    result_published_at=(
+                        decision.result_published_at if decision else None
+                    ),
+                )
+            )
+        return items

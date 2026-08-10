@@ -17,6 +17,8 @@ export const ROUTES = {
     interviewsJdBased: "/interviews/jd-based",
     interviewsRoleBased: "/interviews/role-based",
     upcoming: "/upcoming-interviews",
+    upcomingDetail: (interviewId: string) =>
+      `/upcoming-interviews/${interviewId}`,
     results: "/results",
     practiceResult: (sessionId: string) =>
       `/results/practice/${sessionId}`,

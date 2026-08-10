@@ -1,11 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ApiError } from "@/features/auth/types";
 
-import { listNotifications } from "./api";
-import type { NotificationListResponse } from "./types";
+import { listNotifications, markAllNotificationsRead } from "./api";
+import type { MarkAllReadResponse, NotificationListResponse } from "./types";
 
 export const notificationKeys = {
   all: ["notifications"] as const,
@@ -32,5 +32,16 @@ export function useNotifications(params?: {
     queryFn: () => listNotifications({ unreadOnly, limit }),
     enabled: params?.enabled ?? true,
     refetchInterval: 60_000,
+  });
+}
+
+/** Mark all unread notifications as read, then refresh the cache. */
+export function useMarkAllRead() {
+  const qc = useQueryClient();
+  return useMutation<MarkAllReadResponse, ApiError>({
+    mutationFn: markAllNotificationsRead,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: notificationKeys.all });
+    },
   });
 }

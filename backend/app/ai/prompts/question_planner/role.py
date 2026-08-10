@@ -1,7 +1,7 @@
 """Question planner prompt for catalog and custom role profiles."""
 
 from app.ai.prompts.base import PromptTemplate
-from app.ai.prompts.question_planner_base import (
+from app.ai.prompts.question_planner.base import (
     SHARED_SYSTEM_MECHANICS,
     SHARED_USER_INSTRUCTIONS,
     SHARED_USER_SESSION_CONTEXT,

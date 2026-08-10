@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.api.v1.admin.router import router as admin_router
 from app.api.v1.auth.router import router as auth_router
 from app.api.v1.candidate.interview_router import router as candidate_interview_router
 from app.api.v1.candidate.router import router as candidate_router
@@ -34,6 +35,4 @@ api_router.include_router(
 api_router.include_router(
     notifications_router, prefix="/notifications", tags=["notifications"]
 )
-
-# Additional domain routers are included here as they come online
-# (admin, interviews, ...).
+api_router.include_router(admin_router, prefix="/admin", tags=["admin"])

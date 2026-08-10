@@ -80,6 +80,7 @@ class AIVerdict(StrEnum):
 class AdminDecision(StrEnum):
     CLEARED = "CLEARED"
     NOT_CLEARED = "NOT_CLEARED"
+    NEEDS_FURTHER_REVIEW = "NEEDS_FURTHER_REVIEW"
 
 
 class CodingExecutionStatus(StrEnum):

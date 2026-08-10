@@ -101,7 +101,7 @@ function JoinCta({ item }: { item: UpcomingInterview }) {
   if (item.access_state === "OPEN") {
     return (
       <Button asChild size="sm">
-        <Link href={ROUTES.candidate.interview(item.id)}>
+        <Link href={ROUTES.candidate.upcomingDetail(item.id)}>
           <PlayCircle />
           Join Interview
         </Link>

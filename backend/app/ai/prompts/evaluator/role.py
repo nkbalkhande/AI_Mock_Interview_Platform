@@ -7,7 +7,7 @@ role-relevant skills — NOT fitness for a particular employer or vacancy.
 """
 
 from app.ai.prompts.base import PromptTemplate
-from app.ai.prompts.evaluator_base import (
+from app.ai.prompts.evaluator.base import (
     SHARED_EVALUATION_PRINCIPLES,
     SHARED_OUTPUT_SCHEMA,
     SHARED_SCORING_AND_VERDICT,

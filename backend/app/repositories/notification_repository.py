@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.models.notification import Notification
 from app.repositories.base import BaseRepository
@@ -35,3 +36,20 @@ class NotificationRepository(BaseRepository[Notification]):
             Notification.is_read.is_(False),
         )
         return int((await self.session.execute(stmt)).scalar_one())
+
+    async def mark_all_read(self, user_id: uuid.UUID) -> int:
+        """Mark every unread notification for ``user_id`` as read.
+
+        Returns the number of rows updated.
+        """
+        now = datetime.now(timezone.utc)
+        stmt = (
+            update(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.is_read.is_(False),
+            )
+            .values(is_read=True, read_at=now)
+        )
+        result = await self.session.execute(stmt)
+        return result.rowcount  # type: ignore[return-value]

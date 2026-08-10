@@ -13,19 +13,15 @@ the exact prompt they were generated with.
 """
 
 from app.ai.prompts.base import PromptTemplate
-from app.ai.prompts.evaluator_jd import (
+from app.ai.prompts.evaluator import (
     JD_EVALUATOR_PROMPT,
     JD_EVALUATOR_VERSION,
-)
-from app.ai.prompts.evaluator_role import (
     ROLE_EVALUATOR_PROMPT,
     ROLE_EVALUATOR_VERSION,
 )
-from app.ai.prompts.question_planner_jd import (
+from app.ai.prompts.question_planner import (
     JD_QUESTION_PLANNER_PROMPT,
     JD_QUESTION_PLANNER_VERSION,
-)
-from app.ai.prompts.question_planner_role import (
     ROLE_QUESTION_PLANNER_PROMPT,
     ROLE_QUESTION_PLANNER_VERSION,
 )

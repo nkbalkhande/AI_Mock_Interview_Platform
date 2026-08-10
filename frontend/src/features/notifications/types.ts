@@ -14,3 +14,7 @@ export interface NotificationListResponse {
   items: NotificationItem[];
   unread_count: number;
 }
+
+export interface MarkAllReadResponse {
+  marked: number;
+}

@@ -50,6 +50,11 @@ export interface UpcomingInterview {
   access_end_at: string | null;
 }
 
+export interface UpcomingInterviewDetail extends UpcomingInterview {
+  instructions: string | null;
+  assigned_by_name: string | null;
+}
+
 export interface UpcomingInterviewsResponse {
   items: UpcomingInterview[];
 }
@@ -66,6 +71,30 @@ export interface PracticeResultSummary {
   weaknesses: string[];
 }
 
+export interface PracticeResultListItem {
+  interview_id: string;
+  session_id: string | null;
+  practice_type: "JD_BASED" | "ROLE_BASED" | null;
+  role: string | null;
+  duration_minutes: number | null;
+  completed_at: string | null;
+  overall_score: string | null;
+  technical_score: string | null;
+  communication_score: string | null;
+  reasoning_score: string | null;
+  project_knowledge_score: string | null;
+  ai_verdict: string | null;
+  strengths: string[];
+  weaknesses: string[];
+}
+
+export interface PracticeResultListResponse {
+  items: PracticeResultListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface AssignedResultSummary {
   interview_id: string;
   session_id: string | null;
@@ -76,6 +105,26 @@ export interface AssignedResultSummary {
   admin_decision: string | null;
   admin_feedback: string | null;
   result_published_at: string | null;
+}
+
+export interface AssignedResultListItem {
+  interview_id: string;
+  session_id: string | null;
+  role: string | null;
+  duration_minutes: number | null;
+  completed_at: string | null;
+  ai_overall_score: string | null;
+  ai_verdict: string | null;
+  admin_decision: string | null;
+  admin_feedback: string | null;
+  result_published_at: string | null;
+}
+
+export interface AssignedResultListResponse {
+  items: AssignedResultListItem[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface RecentResultsResponse {

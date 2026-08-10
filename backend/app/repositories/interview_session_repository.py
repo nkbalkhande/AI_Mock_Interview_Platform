@@ -1,4 +1,7 @@
-"""Repository for ``interview_sessions`` (candidate-scoped reads)."""
+"""Repository for ``interview_sessions``.
+
+Candidate-scoped reads and admin-scoped reads for evaluations.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +12,13 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from app.models.final_decision import FinalDecision
 from app.models.interview import Interview
+from app.models.interview_answer import InterviewAnswer
 from app.models.interview_evaluation import InterviewEvaluation
 from app.models.interview_question import InterviewQuestion
 from app.models.interview_session import InterviewSession
+from app.models.user import User
 from app.repositories.base import BaseRepository
 
 
@@ -172,3 +178,100 @@ class InterviewSessionRepository(BaseRepository[InterviewSession]):
         for session in result.scalars().all():
             latest.setdefault(session.interview_id, session)
         return latest
+
+    # ------------------------------------------------------------------
+    # Admin-scoped queries
+    # ------------------------------------------------------------------
+
+    _REVIEWABLE_STATUSES: tuple[str, ...] = (
+        "EVALUATED",
+        "COMPLETED",
+    )
+
+    _REVIEW_INTERVIEW_STATUSES: tuple[str, ...] = (
+        "AI_EVALUATED",
+        "ADMIN_REVIEW",
+        "COMPLETED",
+    )
+
+    async def admin_count_pending_review(self) -> int:
+        """Count sessions ready for admin evaluation (AI done, no admin decision yet)."""
+        stmt = (
+            select(func.count(InterviewSession.id))
+            .select_from(InterviewSession)
+            .join(Interview, InterviewSession.interview_id == Interview.id)
+            .outerjoin(
+                FinalDecision,
+                FinalDecision.session_id == InterviewSession.id,
+            )
+            .where(
+                Interview.interview_type == "ASSIGNED",
+                Interview.status.in_(self._REVIEW_INTERVIEW_STATUSES),
+                InterviewSession.status.in_(self._REVIEWABLE_STATUSES),
+                FinalDecision.admin_decision.is_(None),
+            )
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def admin_list_for_review(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Sequence[InterviewSession]:
+        """Sessions awaiting admin review, with interview + candidate eager-loaded."""
+        offset = (page - 1) * page_size
+        stmt = (
+            select(InterviewSession)
+            .join(Interview, InterviewSession.interview_id == Interview.id)
+            .outerjoin(
+                FinalDecision,
+                FinalDecision.session_id == InterviewSession.id,
+            )
+            .where(
+                Interview.interview_type == "ASSIGNED",
+                Interview.status.in_(self._REVIEW_INTERVIEW_STATUSES),
+                InterviewSession.status.in_(self._REVIEWABLE_STATUSES),
+            )
+            .options(
+                selectinload(InterviewSession.interview).selectinload(
+                    Interview.candidate
+                ),
+                selectinload(InterviewSession.final_decision),
+                selectinload(InterviewSession.evaluations),
+            )
+            .order_by(InterviewSession.ended_at.desc().nulls_last())
+            .offset(offset)
+            .limit(page_size)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().unique().all()
+
+    async def admin_get_evaluation_detail(
+        self, session_id: uuid.UUID
+    ) -> InterviewSession | None:
+        """Full session with questions, answers, evaluations, and final decision."""
+        stmt = (
+            select(InterviewSession)
+            .where(InterviewSession.id == session_id)
+            .options(
+                selectinload(InterviewSession.interview).selectinload(
+                    Interview.candidate
+                ),
+                selectinload(InterviewSession.interview).selectinload(
+                    Interview.assigned_by_user
+                ),
+                selectinload(InterviewSession.questions).selectinload(
+                    InterviewQuestion.answer
+                ),
+                selectinload(InterviewSession.questions).selectinload(
+                    InterviewQuestion.evaluations
+                ),
+                selectinload(InterviewSession.evaluations),
+                selectinload(InterviewSession.final_decision).selectinload(
+                    FinalDecision.decided_by_user
+                ),
+                selectinload(InterviewSession.skill_scores),
+            )
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()

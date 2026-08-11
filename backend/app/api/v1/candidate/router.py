@@ -11,22 +11,29 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import require_roles
 from app.api.dependencies.database import get_db
+from app.api.dependencies.storage import get_storage_service
 from app.api.v1.candidate.schemas import (
     AssignedResultListResponse,
+    CandidateProfileResponse,
+    CandidateProfileUpdateRequest,
     DashboardResponse,
+    InterviewHistoryResponse,
     PracticeResultListResponse,
     RecentResultsResponse,
     UpcomingInterviewDetail,
     UpcomingInterviewsResponse,
 )
 from app.api.v1.candidate.service import CandidateDashboardService
+from app.core.config import settings
+from app.core.exceptions import ValidationError
 from app.domain.enums import RoleName
 from app.models.user import User
+from app.services.storage.file_storage import FileStorageService
 
 router = APIRouter()
 
@@ -44,6 +51,80 @@ async def get_dashboard(
 ) -> DashboardResponse:
     """Return the candidate's dashboard overview (profile summary + stats)."""
     return await service.get_dashboard(current_user)
+
+
+@router.get("/profile", response_model=CandidateProfileResponse)
+async def get_profile(
+    current_user: User = Depends(require_roles(RoleName.CANDIDATE)),
+    service: CandidateDashboardService = Depends(get_candidate_dashboard_service),
+) -> CandidateProfileResponse:
+    """Return the currently signed-in candidate's full profile."""
+    return await service.get_profile(current_user)
+
+
+@router.patch("/profile", response_model=CandidateProfileResponse)
+async def update_profile(
+    payload: CandidateProfileUpdateRequest,
+    current_user: User = Depends(require_roles(RoleName.CANDIDATE)),
+    service: CandidateDashboardService = Depends(get_candidate_dashboard_service),
+) -> CandidateProfileResponse:
+    """Update the authenticated candidate's profile."""
+    return await service.update_profile(current_user, payload)
+
+
+_PHOTO_CONTENT_TYPES = frozenset(
+    {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+)
+
+
+@router.put("/profile/photo", response_model=CandidateProfileResponse)
+async def upload_profile_photo(
+    photo: UploadFile = File(...),
+    current_user: User = Depends(require_roles(RoleName.CANDIDATE)),
+    service: CandidateDashboardService = Depends(get_candidate_dashboard_service),
+    storage: FileStorageService = Depends(get_storage_service),
+) -> CandidateProfileResponse:
+    """Upload or replace the candidate's profile photo."""
+    data = await photo.read()
+    if not data:
+        raise ValidationError("The photo file is empty.")
+
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(data) > max_bytes:
+        raise ValidationError(
+            f"Photo exceeds the {settings.MAX_UPLOAD_SIZE_MB}MB limit."
+        )
+
+    content_type = (photo.content_type or "").lower()
+    if content_type not in _PHOTO_CONTENT_TYPES:
+        raise ValidationError(
+            f"Unsupported photo type: {content_type or 'unknown'}. "
+            "Use JPEG, PNG, or WebP."
+        )
+
+    old_path = (
+        current_user.profile.profile_photo_path
+        if current_user.profile
+        else None
+    )
+
+    stored = storage.save(
+        category="photos",
+        original_name=photo.filename or "photo",
+        data=data,
+        content_type=content_type,
+    )
+
+    try:
+        result = await service.update_profile_photo(current_user, stored.file_path)
+    except Exception:
+        storage.delete(stored.file_path)
+        raise
+
+    if old_path:
+        storage.delete(old_path)
+
+    return result
 
 
 @router.get("/upcoming-interviews", response_model=UpcomingInterviewsResponse)
@@ -80,6 +161,30 @@ async def get_recent_results(
 ) -> RecentResultsResponse:
     """Return the candidate's most recent completed interviews, split by type."""
     return await service.get_recent_results(current_user, limit_per_type=limit_per_type)
+
+
+@router.get("/interviews/history", response_model=InterviewHistoryResponse)
+async def get_interview_history(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    status_filter: str | None = Query(
+        default=None,
+        description="Filter: all | completed | in_progress | evaluating | incomplete",
+    ),
+    type_filter: str | None = Query(
+        default=None, description="Filter: all | practice | assigned"
+    ),
+    current_user: User = Depends(require_roles(RoleName.CANDIDATE)),
+    service: CandidateDashboardService = Depends(get_candidate_dashboard_service),
+) -> InterviewHistoryResponse:
+    """Full interview history — every interview the candidate started or was assigned."""
+    return await service.get_interview_history(
+        current_user,
+        page=page,
+        page_size=page_size,
+        status_filter=status_filter,
+        type_filter=type_filter,
+    )
 
 
 @router.get("/results/practice", response_model=PracticeResultListResponse)

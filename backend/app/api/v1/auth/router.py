@@ -91,12 +91,14 @@ def _set_auth_cookies(response: Response, result: AuthenticatedUser) -> None:
 
 def _build_auth_response(result: AuthenticatedUser) -> LoginResponse:
     roles = [ur.role.name for ur in result.user.user_roles if ur.role is not None]
+    profile = getattr(result.user, "profile", None)
     return LoginResponse(
         user=AuthUser(
             id=result.user.id,
             full_name=result.user.full_name,
             email=result.user.email,
             roles=roles,
+            profile_photo_path=profile.profile_photo_path if profile else None,
         )
     )
 
@@ -111,11 +113,13 @@ async def me(current_user: User = Depends(get_current_user)) -> AuthUser:
     is present.
     """
     roles = [ur.role.name for ur in current_user.user_roles if ur.role is not None]
+    profile = getattr(current_user, "profile", None)
     return AuthUser(
         id=current_user.id,
         full_name=current_user.full_name,
         email=current_user.email,
         roles=roles,
+        profile_photo_path=profile.profile_photo_path if profile else None,
     )
 
 

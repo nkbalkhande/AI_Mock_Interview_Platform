@@ -10,6 +10,7 @@ export interface SessionUser {
   fullName: string;
   email: string;
   roles: Role[];
+  profilePhotoPath?: string | null;
 }
 
 export function hasRole(user: SessionUser | null, role: Role): boolean {

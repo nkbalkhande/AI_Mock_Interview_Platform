@@ -18,6 +18,27 @@ export interface CandidateProfileSummary {
   profile_photo_path: string | null;
 }
 
+export interface CandidateProfileResponse {
+  id: string;
+  full_name: string;
+  email: string;
+  current_designation: string | null;
+  current_organization: string | null;
+  years_of_experience: string | null;
+  phone_number: string | null;
+  bio: string | null;
+  profile_photo_path: string | null;
+}
+
+export interface CandidateProfileUpdateRequest {
+  full_name: string;
+  current_organization: string;
+  current_designation: string;
+  years_of_experience: number;
+  phone_number?: string | null;
+  bio?: string | null;
+}
+
 export interface DashboardStats {
   practice_interviews: number;
   upcoming_interviews: number;
@@ -130,4 +151,31 @@ export interface AssignedResultListResponse {
 export interface RecentResultsResponse {
   practice: PracticeResultSummary[];
   assigned: AssignedResultSummary[];
+}
+
+// ── Interview History ─────────────────────────────────────────────────
+
+export interface InterviewHistoryItem {
+  interview_id: string;
+  session_id: string | null;
+  interview_type: "PRACTICE" | "ASSIGNED";
+  practice_type: "JD_BASED" | "ROLE_BASED" | null;
+  role: string | null;
+  display_status: string;
+  interview_status: string;
+  session_status: string | null;
+  can_resume: boolean;
+  started_at: string | null;
+  last_activity_at: string | null;
+  duration_minutes: number;
+  overall_score: string | null;
+  answered_count: number;
+  total_questions: number;
+}
+
+export interface InterviewHistoryResponse {
+  items: InterviewHistoryItem[];
+  total: number;
+  page: number;
+  page_size: number;
 }

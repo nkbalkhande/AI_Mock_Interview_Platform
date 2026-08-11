@@ -2,7 +2,10 @@ import { apiClient } from "@/lib/api-client";
 
 import type {
   AssignedResultListResponse,
+  CandidateProfileResponse,
+  CandidateProfileUpdateRequest,
   DashboardResponse,
+  InterviewHistoryResponse,
   PracticeResultListResponse,
   RecentResultsResponse,
   UpcomingInterviewDetail,
@@ -69,6 +72,56 @@ export async function getAssignedResults(
   const { data } = await apiClient.get<AssignedResultListResponse>(
     "/candidate/results/assigned",
     { params: { page, page_size: pageSize } },
+  );
+  return data;
+}
+
+/** GET /candidate/interviews/history — full interview history (paginated + filtered). */
+export async function getInterviewHistory(
+  page = 1,
+  pageSize = 20,
+  statusFilter?: string | null,
+  typeFilter?: string | null,
+): Promise<InterviewHistoryResponse> {
+  const params: Record<string, unknown> = { page, page_size: pageSize };
+  if (statusFilter) params.status_filter = statusFilter;
+  if (typeFilter) params.type_filter = typeFilter;
+  const { data } = await apiClient.get<InterviewHistoryResponse>(
+    "/candidate/interviews/history",
+    { params },
+  );
+  return data;
+}
+
+/** GET /candidate/profile — full candidate profile. */
+export async function getProfile(): Promise<CandidateProfileResponse> {
+  const { data } = await apiClient.get<CandidateProfileResponse>(
+    "/candidate/profile",
+  );
+  return data;
+}
+
+/** PATCH /candidate/profile — update the current candidate profile. */
+export async function updateProfile(
+  payload: CandidateProfileUpdateRequest,
+): Promise<CandidateProfileResponse> {
+  const { data } = await apiClient.patch<CandidateProfileResponse>(
+    "/candidate/profile",
+    payload,
+  );
+  return data;
+}
+
+/** PUT /candidate/profile/photo — upload or replace the profile photo. */
+export async function uploadProfilePhoto(
+  file: File,
+): Promise<CandidateProfileResponse> {
+  const formData = new FormData();
+  formData.append("photo", file);
+  const { data } = await apiClient.put<CandidateProfileResponse>(
+    "/candidate/profile/photo",
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
   );
   return data;
 }

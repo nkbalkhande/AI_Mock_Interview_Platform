@@ -77,7 +77,6 @@ function LoginForm() {
           searchParams.get("redirect") ??
           dashboardPathForRoles(data.user.roles);
         router.replace(redirectTo);
-        router.refresh();
       },
       onError: (error: ApiError) => {
         setFormError(error?.message ?? "Unable to sign in. Please try again.");

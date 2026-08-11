@@ -158,6 +158,67 @@ class InterviewRepository(BaseRepository[Interview]):
         return result.scalars().all()
 
     # ------------------------------------------------------------------
+    # Candidate interview history (all statuses, not just completed)
+    # ------------------------------------------------------------------
+
+    _HISTORY_EXCLUDED_STATUSES: tuple[str, ...] = ("DRAFT",)
+
+    async def count_history(
+        self,
+        candidate_id: uuid.UUID,
+        *,
+        status_filter: str | None = None,
+        type_filter: str | None = None,
+    ) -> int:
+        stmt = select(func.count(Interview.id)).where(
+            Interview.candidate_id == candidate_id,
+            Interview.status.not_in(self._HISTORY_EXCLUDED_STATUSES),
+        )
+        stmt = self._apply_history_filters(stmt, status_filter=status_filter, type_filter=type_filter)
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def list_history_paginated(
+        self,
+        candidate_id: uuid.UUID,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status_filter: str | None = None,
+        type_filter: str | None = None,
+    ) -> Sequence[Interview]:
+        offset = (page - 1) * page_size
+        stmt = (
+            select(Interview)
+            .where(
+                Interview.candidate_id == candidate_id,
+                Interview.status.not_in(self._HISTORY_EXCLUDED_STATUSES),
+            )
+            .options(selectinload(Interview.sessions))
+            .order_by(Interview.updated_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        stmt = self._apply_history_filters(stmt, status_filter=status_filter, type_filter=type_filter)
+        result = await self.session.execute(stmt)
+        return result.scalars().unique().all()
+
+    def _apply_history_filters(self, stmt, *, status_filter, type_filter):  # noqa: ANN001, ANN202
+        if type_filter == "practice":
+            stmt = stmt.where(Interview.interview_type == "PRACTICE")
+        elif type_filter == "assigned":
+            stmt = stmt.where(Interview.interview_type == "ASSIGNED")
+
+        if status_filter == "completed":
+            stmt = stmt.where(Interview.status.in_(_COMPLETED_STATUSES))
+        elif status_filter == "in_progress":
+            stmt = stmt.where(Interview.status == "IN_PROGRESS")
+        elif status_filter == "evaluating":
+            stmt = stmt.where(Interview.status.in_(("SUBMITTED", "AI_EVALUATED", "ADMIN_REVIEW")))
+        elif status_filter == "incomplete":
+            stmt = stmt.where(Interview.status.in_(("CANCELLED", "EXPIRED")))
+        return stmt
+
+    # ------------------------------------------------------------------
     # Admin-scoped queries
     # ------------------------------------------------------------------
 

@@ -13,7 +13,9 @@ from app.api.v1.admin.router import router as admin_router
 from app.api.v1.auth.router import router as auth_router
 from app.api.v1.candidate.interview_router import router as candidate_interview_router
 from app.api.v1.candidate.router import router as candidate_router
+from app.api.v1.files.router import router as files_router
 from app.api.v1.notifications.router import router as notifications_router
+from app.api.v1.voice.router import router as voice_router
 
 api_router = APIRouter()
 
@@ -36,3 +38,5 @@ api_router.include_router(
     notifications_router, prefix="/notifications", tags=["notifications"]
 )
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
+api_router.include_router(files_router, prefix="/files", tags=["files"])
+api_router.include_router(voice_router, prefix="/voice", tags=["voice"])

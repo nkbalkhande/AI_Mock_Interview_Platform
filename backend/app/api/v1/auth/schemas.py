@@ -49,6 +49,7 @@ class AuthUser(BaseModel):
     full_name: str
     email: EmailStr
     roles: list[str]
+    profile_photo_path: str | None = None
 
 
 class LoginResponse(BaseModel):

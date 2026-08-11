@@ -15,8 +15,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class CandidateProfileSummary(BaseModel):
@@ -31,6 +32,34 @@ class CandidateProfileSummary(BaseModel):
     current_organization: str | None = None
     years_of_experience: Decimal | None = None
     profile_photo_path: str | None = None
+
+
+class CandidateProfileResponse(BaseModel):
+    """Full candidate profile for the candidate profile page."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
+    email: EmailStr
+    current_designation: str | None = None
+    current_organization: str | None = None
+    years_of_experience: Decimal | None = None
+    phone_number: str | None = None
+    bio: str | None = None
+    profile_photo_path: str | None = None
+
+
+class CandidateProfileUpdateRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=150)
+    current_organization: str = Field(min_length=1, max_length=200)
+    current_designation: str = Field(min_length=1, max_length=150)
+    years_of_experience: Annotated[
+        Decimal,
+        Field(ge=0, le=Decimal("99.99"), max_digits=4, decimal_places=2),
+    ]
+    phone_number: str | None = Field(default=None, max_length=30)
+    bio: str | None = Field(default=None, max_length=1000)
 
 
 class DashboardStats(BaseModel):
@@ -201,6 +230,49 @@ class AssignedResultListResponse(BaseModel):
     """Paginated list of all assigned results."""
 
     items: list[AssignedResultListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+# ── Interview History ────────────────────────────────────────────────────
+
+class InterviewHistoryItem(BaseModel):
+    """One row in the candidate's full interview history list."""
+
+    interview_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+    interview_type: str = Field(description="PRACTICE or ASSIGNED")
+    practice_type: str | None = Field(
+        default=None, description="JD_BASED or ROLE_BASED (practice only)"
+    )
+    role: str | None = None
+    display_status: str = Field(
+        description=(
+            "User-friendly status: Completed, In Progress, Evaluating, "
+            "Submitted, Abandoned, Cancelled, Expired, Not Started"
+        )
+    )
+    interview_status: str = Field(description="Raw interview.status value")
+    session_status: str | None = Field(
+        default=None, description="Raw session.status value"
+    )
+    can_resume: bool = Field(
+        default=False,
+        description="True only while an unfinished interview is inside its access window.",
+    )
+    started_at: datetime | None = None
+    last_activity_at: datetime | None = None
+    duration_minutes: int
+    overall_score: Decimal | None = None
+    answered_count: int = 0
+    total_questions: int = 0
+
+
+class InterviewHistoryResponse(BaseModel):
+    """Paginated interview history with total for the frontend paginator."""
+
+    items: list[InterviewHistoryItem]
     total: int
     page: int
     page_size: int

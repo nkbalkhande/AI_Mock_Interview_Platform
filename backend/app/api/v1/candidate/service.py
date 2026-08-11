@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,9 +18,13 @@ from app.api.v1.candidate.schemas import (
     AssignedResultListItem,
     AssignedResultListResponse,
     AssignedResultSummary,
+    CandidateProfileResponse,
     CandidateProfileSummary,
+    CandidateProfileUpdateRequest,
     DashboardResponse,
     DashboardStats,
+    InterviewHistoryItem,
+    InterviewHistoryResponse,
     PracticeResultListItem,
     PracticeResultListResponse,
     PracticeResultSummary,
@@ -32,6 +37,7 @@ from app.models.interview import Interview
 from app.models.interview_evaluation import InterviewEvaluation
 from app.models.interview_session import InterviewSession
 from app.models.user import User
+from app.models.user_profile import UserProfile
 from app.repositories.interview_repository import InterviewRepository
 from app.repositories.interview_session_repository import InterviewSessionRepository
 from app.services.interviews.access_window import access_state
@@ -105,6 +111,60 @@ class CandidateDashboardService:
         rows = await self.interviews.list_upcoming(candidate.id, limit=limit)
         items = [self._to_upcoming(row) for row in rows]
         return UpcomingInterviewsResponse(items=items)
+
+    async def get_profile(self, candidate: User) -> CandidateProfileResponse:
+        profile = candidate.profile
+        return CandidateProfileResponse(
+            id=candidate.id,
+            full_name=candidate.full_name,
+            email=candidate.email,
+            current_designation=(profile.current_designation if profile else None),
+            current_organization=(profile.current_organization if profile else None),
+            years_of_experience=(profile.years_of_experience if profile else None),
+            phone_number=(profile.phone_number if profile else None),
+            bio=(profile.bio if profile else None),
+            profile_photo_path=(profile.profile_photo_path if profile else None),
+        )
+
+    async def update_profile_photo(
+        self, candidate: User, photo_path: str
+    ) -> CandidateProfileResponse:
+        if candidate.profile is None:
+            candidate.profile = UserProfile(profile_photo_path=photo_path)
+        else:
+            candidate.profile.profile_photo_path = photo_path
+
+        await self.session.flush()
+        await self.session.commit()
+        return await self.get_profile(candidate)
+
+    async def update_profile(
+        self,
+        candidate: User,
+        payload: CandidateProfileUpdateRequest,
+    ) -> CandidateProfileResponse:
+        if candidate.profile is None:
+            candidate.profile = UserProfile(
+                current_organization=payload.current_organization.strip(),
+                current_designation=payload.current_designation.strip(),
+                years_of_experience=payload.years_of_experience,
+                phone_number=(payload.phone_number.strip() if payload.phone_number else None),
+                bio=payload.bio.strip() if payload.bio else None,
+            )
+        else:
+            candidate.full_name = payload.full_name.strip()
+            candidate.profile.current_organization = payload.current_organization.strip()
+            candidate.profile.current_designation = payload.current_designation.strip()
+            candidate.profile.years_of_experience = payload.years_of_experience
+            candidate.profile.phone_number = (
+                payload.phone_number.strip() if payload.phone_number else None
+            )
+            candidate.profile.bio = payload.bio.strip() if payload.bio else None
+
+        await self.session.flush()
+        await self.session.commit()
+
+        return await self.get_profile(candidate)
 
     async def get_upcoming_interview_detail(
         self, candidate: User, interview_id: uuid.UUID
@@ -182,6 +242,148 @@ class CandidateDashboardService:
         return AssignedResultListResponse(
             items=items, total=total, page=page, page_size=page_size
         )
+
+    async def get_interview_history(
+        self,
+        candidate: User,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status_filter: str | None = None,
+        type_filter: str | None = None,
+    ) -> InterviewHistoryResponse:
+        """Full interview history — every interview the candidate started or was assigned."""
+        total = await self.interviews.count_history(
+            candidate.id,
+            status_filter=status_filter,
+            type_filter=type_filter,
+        )
+        rows = await self.interviews.list_history_paginated(
+            candidate.id,
+            page=page,
+            page_size=page_size,
+            status_filter=status_filter,
+            type_filter=type_filter,
+        )
+
+        interview_ids = [i.id for i in rows]
+        finals = await self.sessions.latest_final_evaluation_for_interviews(
+            interview_ids
+        )
+
+        latest_sessions: dict[uuid.UUID, InterviewSession] = {}
+        for interview in rows:
+            if interview.sessions:
+                latest_sessions[interview.id] = max(
+                    interview.sessions, key=lambda s: s.attempt_number
+                )
+
+        counts = await self.sessions.question_counts_by_session(
+            [s.id for s in latest_sessions.values()]
+        )
+
+        items: list[InterviewHistoryItem] = []
+        now = datetime.now(timezone.utc)
+        for interview in rows:
+            latest_session = latest_sessions.get(interview.id)
+            evaluation: InterviewEvaluation | None = finals.get(interview.id)
+            can_resume = self._can_resume_interview(
+                interview, latest_session, now=now
+            )
+
+            total_qs, answered = (
+                counts.get(latest_session.id, (0, 0))
+                if latest_session
+                else (0, 0)
+            )
+
+            items.append(
+                InterviewHistoryItem(
+                    interview_id=interview.id,
+                    session_id=latest_session.id if latest_session else None,
+                    interview_type=interview.interview_type,
+                    practice_type=interview.practice_type,
+                    role=interview.role_name_snapshot,
+                    display_status=self._derive_display_status(
+                        interview.status,
+                        latest_session.status if latest_session else None,
+                        can_resume=can_resume,
+                    ),
+                    interview_status=interview.status,
+                    session_status=(
+                        latest_session.status if latest_session else None
+                    ),
+                    can_resume=can_resume,
+                    started_at=(
+                        latest_session.started_at if latest_session else None
+                    ),
+                    last_activity_at=(
+                        latest_session.last_activity_at
+                        if latest_session
+                        else interview.updated_at
+                    ),
+                    duration_minutes=interview.duration_minutes,
+                    overall_score=(
+                        evaluation.overall_score if evaluation else None
+                    ),
+                    answered_count=answered,
+                    total_questions=total_qs,
+                )
+            )
+
+        return InterviewHistoryResponse(
+            items=items, total=total, page=page, page_size=page_size
+        )
+
+    @staticmethod
+    def _derive_display_status(
+        interview_status: str,
+        session_status: str | None,
+        *,
+        can_resume: bool,
+    ) -> str:
+        if interview_status in ("COMPLETED",):
+            return "Completed"
+        if interview_status in ("CANCELLED",):
+            return "Cancelled"
+        if interview_status in ("EXPIRED",):
+            return "Expired"
+        if interview_status in ("SUBMITTED", "AI_EVALUATED", "ADMIN_REVIEW"):
+            return "Evaluating"
+        if interview_status == "IN_PROGRESS":
+            if session_status == "ABANDONED":
+                return "Abandoned"
+            if session_status == "PAUSED":
+                return "Paused" if can_resume else "Interrupted"
+            return "In Progress" if can_resume else "Interrupted"
+        if interview_status in ("ASSIGNED", "SCHEDULED", "AVAILABLE"):
+            return "Not Started"
+        return interview_status.replace("_", " ").title()
+
+    @staticmethod
+    def _can_resume_interview(
+        interview: Interview,
+        session: InterviewSession | None,
+        *,
+        now: datetime,
+    ) -> bool:
+        if session is None or session.status not in ("IN_PROGRESS", "PAUSED"):
+            return False
+
+        if interview.interview_type == "ASSIGNED":
+            if interview.access_start_at is not None and now < interview.access_start_at:
+                return False
+            if interview.access_end_at is not None and now > interview.access_end_at:
+                return False
+            return True
+
+        if session.started_at is None:
+            return False
+        started_at = session.started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        deadline = started_at + timedelta(minutes=interview.duration_minutes)
+        return now < deadline
 
     # ---- private helpers ------------------------------------------------
 

@@ -1,18 +1,25 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getAssignedResults,
   getDashboard,
+  getInterviewHistory,
   getPracticeResults,
+  getProfile,
   getRecentResults,
   getUpcomingInterviewDetail,
   getUpcomingInterviews,
+  updateProfile,
+  uploadProfilePhoto,
 } from "./api";
 import type {
   AssignedResultListResponse,
+  CandidateProfileResponse,
+  CandidateProfileUpdateRequest,
   DashboardResponse,
+  InterviewHistoryResponse,
   PracticeResultListResponse,
   RecentResultsResponse,
   UpcomingInterviewDetail,
@@ -24,6 +31,7 @@ import type { ApiError } from "@/features/auth/types";
 export const candidateKeys = {
   all: ["candidate"] as const,
   dashboard: () => [...candidateKeys.all, "dashboard"] as const,
+  profile: () => [...candidateKeys.all, "profile"] as const,
   upcoming: (limit: number) =>
     [...candidateKeys.all, "upcoming", limit] as const,
   upcomingDetail: (id: string) =>
@@ -34,6 +42,20 @@ export const candidateKeys = {
     [...candidateKeys.all, "practice-results", page, pageSize] as const,
   assignedResults: (page: number, pageSize: number) =>
     [...candidateKeys.all, "assigned-results", page, pageSize] as const,
+  interviewHistory: (
+    page: number,
+    pageSize: number,
+    statusFilter: string | null,
+    typeFilter: string | null,
+  ) =>
+    [
+      ...candidateKeys.all,
+      "interview-history",
+      page,
+      pageSize,
+      statusFilter,
+      typeFilter,
+    ] as const,
 };
 
 /** Dashboard overview (profile summary + stat tiles). */
@@ -79,10 +101,62 @@ export function usePracticeResults(page = 1, pageSize = 20) {
   });
 }
 
+/** Full candidate profile for the profile settings page. */
+export function useCandidateProfile() {
+  return useQuery<CandidateProfileResponse, ApiError>({
+    queryKey: candidateKeys.profile(),
+    queryFn: getProfile,
+  });
+}
+
+export function useUpdateCandidateProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation<CandidateProfileResponse, ApiError, CandidateProfileUpdateRequest>({
+    mutationFn: updateProfile,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(candidateKeys.profile(), updated);
+      queryClient.invalidateQueries({ queryKey: candidateKeys.profile() });
+    },
+  });
+}
+
+export function useUploadProfilePhoto() {
+  const queryClient = useQueryClient();
+
+  return useMutation<CandidateProfileResponse, ApiError, File>({
+    mutationFn: uploadProfilePhoto,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(candidateKeys.profile(), updated);
+      queryClient.invalidateQueries({ queryKey: candidateKeys.dashboard() });
+      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
+  });
+}
+
 /** Paginated assigned interview results. */
 export function useAssignedResults(page = 1, pageSize = 20) {
   return useQuery<AssignedResultListResponse, ApiError>({
     queryKey: candidateKeys.assignedResults(page, pageSize),
     queryFn: () => getAssignedResults(page, pageSize),
+  });
+}
+
+/** Full interview history with status/type filters. */
+export function useInterviewHistory(
+  page = 1,
+  pageSize = 20,
+  statusFilter: string | null = null,
+  typeFilter: string | null = null,
+) {
+  return useQuery<InterviewHistoryResponse, ApiError>({
+    queryKey: candidateKeys.interviewHistory(
+      page,
+      pageSize,
+      statusFilter,
+      typeFilter,
+    ),
+    queryFn: () =>
+      getInterviewHistory(page, pageSize, statusFilter, typeFilter),
   });
 }

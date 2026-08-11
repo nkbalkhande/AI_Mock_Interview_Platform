@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLogout } from "@/features/auth/hooks";
 import { useAuth } from "@/hooks/use-auth";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, storageFileUrl } from "@/lib/constants";
 import { isAdmin } from "@/lib/auth";
 
 interface ProfileMenuProps {
@@ -25,6 +25,9 @@ interface ProfileMenuProps {
 export function ProfileMenu({ photoUrl }: ProfileMenuProps) {
   const { user } = useAuth();
   const logoutMutation = useLogout();
+
+  const resolvedPhotoUrl =
+    photoUrl ?? storageFileUrl(user?.profilePhotoPath);
 
   const profileHref = isAdmin(user)
     ? ROUTES.admin.profile
@@ -38,7 +41,7 @@ export function ProfileMenu({ photoUrl }: ProfileMenuProps) {
       >
         <ProfileAvatar
           fullName={user?.fullName}
-          photoUrl={photoUrl}
+          photoUrl={resolvedPhotoUrl}
           className="h-9 w-9"
         />
       </DropdownMenuTrigger>

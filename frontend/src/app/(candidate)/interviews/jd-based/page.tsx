@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Clock, FileText, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Clock,
+  FileText,
+  Sparkles,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -148,16 +155,30 @@ export default function JdBasedInterviewPage() {
                   onClick={() => setDurationMinutes(opt.minutes)}
                   disabled={mutation.isPending}
                   className={cn(
-                    "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors",
+                    "relative flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left",
+                    "transition-all duration-200 ease-out",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     "disabled:cursor-not-allowed disabled:opacity-60",
                     selected
-                      ? "border-primary bg-primary/5 text-foreground"
-                      : "border-border bg-card hover:border-primary/40 hover:bg-accent/40",
+                      ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                      : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent hover:shadow-sm",
                   )}
                 >
+                  {selected ? (
+                    <Check
+                      aria-hidden="true"
+                      className="absolute right-2 top-2 h-3.5 w-3.5"
+                    />
+                  ) : null}
                   <span className="text-sm font-semibold">{opt.label}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span
+                    className={cn(
+                      "text-xs",
+                      selected
+                        ? "text-primary-foreground/80"
+                        : "text-muted-foreground",
+                    )}
+                  >
                     {opt.description}
                   </span>
                 </button>

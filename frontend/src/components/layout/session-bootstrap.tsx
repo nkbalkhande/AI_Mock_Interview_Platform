@@ -51,5 +51,9 @@ export function SessionBootstrap({
     }
   }, [data, isFetched, isError, requireRole, router, user]);
 
+  if (!isFetched || data === null || isError || !user) {
+    return null;
+  }
+
   return <>{children}</>;
 }

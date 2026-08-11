@@ -158,6 +158,56 @@ class InterviewSessionRepository(BaseRepository[InterviewSession]):
                 finals[interview_id] = final
         return finals
 
+    async def question_counts_by_session(
+        self, session_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, tuple[int, int]]:
+        """Return ``session_id -> (total_questions, answered_questions)``.
+
+        Counted with aggregates rather than walking
+        ``session.questions`` so callers never risk a lazy load inside the
+        async context, and so progress for a page of history costs two
+        cheap COUNT queries instead of hydrating every question row.
+        """
+        if not session_ids:
+            return {}
+
+        total_stmt = (
+            select(
+                InterviewQuestion.session_id,
+                func.count(InterviewQuestion.id),
+            )
+            .where(InterviewQuestion.session_id.in_(session_ids))
+            .group_by(InterviewQuestion.session_id)
+        )
+        answered_stmt = (
+            select(
+                InterviewQuestion.session_id,
+                func.count(InterviewAnswer.id),
+            )
+            .select_from(InterviewQuestion)
+            .join(
+                InterviewAnswer,
+                InterviewAnswer.question_id == InterviewQuestion.id,
+            )
+            .where(
+                InterviewQuestion.session_id.in_(session_ids),
+                InterviewAnswer.is_submitted.is_(True),
+            )
+            .group_by(InterviewQuestion.session_id)
+        )
+
+        totals = {
+            sid: count
+            for sid, count in (await self.session.execute(total_stmt)).all()
+        }
+        answered = {
+            sid: count
+            for sid, count in (await self.session.execute(answered_stmt)).all()
+        }
+        return {
+            sid: (totals.get(sid, 0), answered.get(sid, 0)) for sid in totals
+        }
+
     async def latest_session_by_interview(
         self, interview_ids: Sequence[uuid.UUID]
     ) -> dict[uuid.UUID, InterviewSession]:

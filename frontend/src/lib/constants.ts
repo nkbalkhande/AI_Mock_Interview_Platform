@@ -5,6 +5,12 @@ export const APP_NAME =
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/backend";
 
+/** Build a browser-accessible URL for a file stored in backend storage. */
+export function storageFileUrl(storagePath: string | null | undefined): string | null {
+  if (!storagePath) return null;
+  return `${API_BASE_URL}/files/${storagePath}`;
+}
+
 export const ROUTES = {
   home: "/",
   login: "/login",
@@ -16,6 +22,7 @@ export const ROUTES = {
     interviews: "/interviews",
     interviewsJdBased: "/interviews/jd-based",
     interviewsRoleBased: "/interviews/role-based",
+    interviewHistory: "/interviews/history",
     upcoming: "/upcoming-interviews",
     upcomingDetail: (interviewId: string) =>
       `/upcoming-interviews/${interviewId}`,

@@ -25,6 +25,7 @@ export interface AuthUser {
   full_name: string;
   email: string;
   roles: Role[];
+  profile_photo_path: string | null;
 }
 
 export interface LoginResponse {

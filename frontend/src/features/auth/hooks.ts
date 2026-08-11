@@ -24,6 +24,7 @@ const AUTH_ME_KEY = ["auth", "me"] as const;
  */
 export function useLogin() {
   const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
 
   return useMutation<LoginResponse, ApiError, LoginInput>({
     mutationFn: login,
@@ -33,7 +34,9 @@ export function useLogin() {
         fullName: user.full_name,
         email: user.email,
         roles: user.roles,
+        profilePhotoPath: user.profile_photo_path,
       });
+      queryClient.setQueryData(AUTH_ME_KEY, () => user);
     },
   });
 }
@@ -44,6 +47,7 @@ export function useLogin() {
  */
 export function useRegister() {
   const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
 
   return useMutation<LoginResponse, ApiError, RegisterInput>({
     mutationFn: register,
@@ -53,7 +57,9 @@ export function useRegister() {
         fullName: user.full_name,
         email: user.email,
         roles: user.roles,
+        profilePhotoPath: user.profile_photo_path,
       });
+      queryClient.setQueryData(AUTH_ME_KEY, () => user);
     },
   });
 }
@@ -84,6 +90,7 @@ export function useMe(options?: { enabled?: boolean }) {
           fullName: me.full_name,
           email: me.email,
           roles: me.roles,
+          profilePhotoPath: me.profile_photo_path,
         });
         return me;
       } catch (err) {

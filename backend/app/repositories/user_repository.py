@@ -27,7 +27,10 @@ class UserRepository(BaseRepository[User]):
         stmt = (
             select(User)
             .where(func.lower(User.email) == email.strip().lower())
-            .options(selectinload(User.user_roles).selectinload(UserRole.role))
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.profile),
+            )
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, Briefcase, Loader2, RefreshCw } from "lucide-react";
+import {
+  ArrowRight,
+  Briefcase,
+  Check,
+  Clock,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -218,21 +225,45 @@ export default function RoleBasedInterviewPage() {
       <Card>
         <CardContent className="flex flex-col gap-5 pt-6">
           <div>
-            <h2 className="text-sm font-semibold">Interview duration</h2>
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {DURATIONS.map((minutes) => (
-                <button
-                  key={minutes}
-                  type="button"
-                  onClick={() => setDuration(minutes)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-sm",
-                    duration === minutes && "border-primary bg-primary/5",
-                  )}
-                >
-                  {minutes} minutes
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Interview duration</h2>
+            </div>
+            <div
+              role="radiogroup"
+              aria-label="Interview duration in minutes"
+              className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4"
+            >
+              {DURATIONS.map((minutes) => {
+                const selected = duration === minutes;
+                return (
+                  <button
+                    key={minutes}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setDuration(minutes)}
+                    disabled={start.isPending}
+                    className={cn(
+                      "relative rounded-lg border px-3 py-2.5 text-sm font-medium",
+                      "transition-all duration-200 ease-out",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      "disabled:cursor-not-allowed disabled:opacity-60",
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                        : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent hover:shadow-sm",
+                    )}
+                  >
+                    {selected ? (
+                      <Check
+                        aria-hidden="true"
+                        className="absolute right-2 top-2 h-3.5 w-3.5"
+                      />
+                    ) : null}
+                    {minutes} minutes
+                  </button>
+                );
+              })}
             </div>
           </div>
           {start.isError ? (

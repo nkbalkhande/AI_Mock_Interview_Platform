@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     STORAGE_ROOT: str = "./storage"
     MAX_UPLOAD_SIZE_MB: int = 10
 
+    # Voice engine
+    GROQ_API_KEY: str | None = None
+    STT_MODEL: str = "whisper-large-v3-turbo"
+    TTS_VOICE: str = "af_heart"
+    TTS_SPEED: float = 1.0
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def async_database_url(self) -> str:

@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileCheck,
   FileEdit,
+  History,
   LayoutDashboard,
   User as UserIcon,
   X,
@@ -63,6 +64,14 @@ const CANDIDATE_NAV: NavEntry[] = [
           icon: ClipboardList,
         },
       ],
+    },
+  },
+  {
+    kind: "item",
+    item: {
+      label: "Interview History",
+      href: ROUTES.candidate.interviewHistory,
+      icon: History,
     },
   },
   {

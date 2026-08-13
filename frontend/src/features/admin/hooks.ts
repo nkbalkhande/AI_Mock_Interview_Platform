@@ -37,8 +37,8 @@ export const adminKeys = {
   dashboard: () => [...adminKeys.all, "dashboard"] as const,
   users: (params: Record<string, unknown>) =>
     [...adminKeys.all, "users", params] as const,
-  userDetail: (id: string) =>
-    [...adminKeys.all, "user-detail", id] as const,
+  userDetail: (id: string, params: Record<string, unknown> = {}) =>
+    [...adminKeys.all, "user-detail", id, params] as const,
   interviews: (params: Record<string, unknown>) =>
     [...adminKeys.all, "interviews", params] as const,
   interviewDetail: (id: string) =>
@@ -78,10 +78,13 @@ export function useUsers(params: {
   });
 }
 
-export function useUserDetail(userId: string | null) {
+export function useUserDetail(
+  userId: string | null,
+  params?: { page?: number; page_size?: number },
+) {
   return useQuery<UserDetailResponse, ApiError>({
-    queryKey: adminKeys.userDetail(userId ?? ""),
-    queryFn: () => getUserDetail(userId!),
+    queryKey: adminKeys.userDetail(userId ?? "", params ?? {}),
+    queryFn: () => getUserDetail(userId!, params),
     enabled: !!userId,
   });
 }
@@ -157,6 +160,7 @@ export function useCancelInterview() {
 export function useEvaluations(params: {
   page?: number;
   page_size?: number;
+  review_state?: string;
 }) {
   return useQuery<EvaluationListResponse, ApiError>({
     queryKey: adminKeys.evaluations(params),

@@ -47,8 +47,8 @@ from app.services.storage.file_storage import FileStorageService, StoredFile
 
 router = APIRouter()
 
-ACCESS_COOKIE_NAME = "session"  # noqa: S105 - cookie name, not a secret
-REFRESH_COOKIE_NAME = "refresh_token"  # noqa: S105 - cookie name, not a secret
+ACCESS_COOKIE_NAME = settings.auth.access_cookie_name
+REFRESH_COOKIE_NAME = settings.auth.refresh_cookie_name
 
 # Accepted upload content types.
 _RESUME_CONTENT_TYPES = frozenset(
@@ -78,13 +78,13 @@ def _set_auth_cookies(response: Response, result: AuthenticatedUser) -> None:
     response.set_cookie(
         ACCESS_COOKIE_NAME,
         result.tokens.access_token,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=settings.auth.access_token_expire_minutes * 60,
         **common,
     )
     response.set_cookie(
         REFRESH_COOKIE_NAME,
         result.tokens.refresh_token,
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        max_age=settings.auth.refresh_token_expire_days * 24 * 60 * 60,
         **common,
     )
 
@@ -188,10 +188,10 @@ async def _read_validated_upload(
     if not data:
         raise ValidationError(f"The {field} file is empty.")
 
-    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    max_bytes = settings.storage.max_upload_size_mb * 1024 * 1024
     if len(data) > max_bytes:
         raise ValidationError(
-            f"The {field} file exceeds the {settings.MAX_UPLOAD_SIZE_MB}MB limit."
+            f"The {field} file exceeds the {settings.storage.max_upload_size_mb}MB limit."
         )
 
     content_type = (upload.content_type or "").lower()

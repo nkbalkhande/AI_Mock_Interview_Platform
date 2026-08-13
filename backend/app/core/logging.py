@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 
 from app.core.config import settings
 
@@ -20,27 +21,34 @@ def configure_logging() -> None:
     if _CONFIGURED:
         return
 
-    level = logging.DEBUG if settings.DEBUG else logging.INFO
+    level_name = (settings.logging.level or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter(
-            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
+    handler.setFormatter(formatter)
 
     root = logging.getLogger()
     root.setLevel(level)
     root.handlers.clear()
     root.addHandler(handler)
 
+    if settings.logging.file_path:
+        log_path = Path(settings.logging.file_path)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_path, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+
     # Show per-request access logs in development so API calls are visible;
     # keep them quiet in production to avoid noise.
     logging.getLogger("uvicorn.access").setLevel(
-        logging.INFO if settings.DEBUG else logging.WARNING
+        logging.INFO if settings.app.debug else logging.WARNING
     )
     logging.getLogger("sqlalchemy.engine").setLevel(
-        logging.INFO if settings.DB_ECHO else logging.WARNING
+        logging.INFO if settings.postgres.echo else logging.WARNING
     )
 
     _CONFIGURED = True

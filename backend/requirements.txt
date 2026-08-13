@@ -5,6 +5,7 @@ uvicorn[standard]==0.34.0
 # Settings & validation
 pydantic==2.10.4
 pydantic-settings==2.7.1
+pyyaml==6.0.2
 email-validator==2.2.0
 
 # Database (PostgreSQL, SQLAlchemy 2.0 async + sync driver for Alembic)
@@ -32,6 +33,7 @@ langchain==0.3.13
 langgraph==0.2.60
 langchain-openai==0.2.14
 openai==1.58.1
+litellm==1.59.12
 
 # Resume parsing
 docling==2.14.0

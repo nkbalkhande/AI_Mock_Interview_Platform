@@ -50,6 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app.core.config import settings
 from app.core.exceptions import (
     BusinessRuleError,
     ConflictError,
@@ -91,6 +92,8 @@ from app.services.interviews.evaluator import (
     TranscriptEntry,
 )
 from app.services.interviews.question_planner import (
+    CLOSING_FALLBACK_QUESTION,
+    INTRODUCTION_FALLBACK_QUESTION,
     AnswerSnapshot,
     JdQuestionPlanner,
     TargetContext,
@@ -103,39 +106,17 @@ from app.services.resumes.current_resume_loader import (
 logger = get_logger(__name__)
 
 
-# JD validation constraints — chosen to filter out obvious garbage (a single
-# word, or a whole book) without being annoying for real job descriptions.
-JD_MIN_CHARS = 200
-JD_MAX_CHARS = 20000
-
-# Cap on resume text captured into the session snapshot. Longer than the
-# planner prompt limit so the evaluator (which sees more context per turn)
-# has room; still bounded to keep JSONB size in check.
-_RESUME_SNAPSHOT_CHAR_LIMIT = 12000
-
-# Duration bounds for the JD-based practice interview. Matches the
-# ``interviews.duration_minutes > 0 AND <= 180`` DB CHECK, tightened to a
-# sensible product range.
-DURATION_MIN_MINUTES = 15
-DURATION_MAX_MINUTES = 90
-DEFAULT_DURATION_MINUTES = 30
-
-ROLE_REQUIREMENTS_MAX_ITEMS = 20
-ROLE_REQUIREMENT_MAX_CHARS = 300
-ROLE_SKILLS_MAX_ITEMS = 30
-ROLE_SKILL_MAX_CHARS = 100
-
-# A crashed background worker must not strand a result forever. The claim is
-# stored in interview_state because it is session-specific and does not
-# require interpreting unrelated activity timestamps.
-_EVALUATION_LEASE = timedelta(minutes=5)
-
-# Absolute hard cap on questions per session — the planner should always
-# resolve before this, but if the model insists on continuing we stop.
-_HARD_QUESTION_CAP = 20
+# Interview limits, duration bands, and snapshot caps live in
+# ``settings/config.yaml`` (``settings.interview`` / ``settings.resume``).
 
 # Terminal states — anything past IN_PROGRESS is not answerable/re-startable.
-_TERMINAL_STATUSES = {"SUBMITTED", "EVALUATING", "EVALUATED", "COMPLETED", "ABANDONED"}
+_TERMINAL_STATUSES = {
+    "SUBMITTED",
+    "EVALUATING",
+    "EVALUATED",
+    "COMPLETED",
+    "ABANDONED",
+}
 
 
 # Empty coverage state stamped onto a new session. Keeps the shape stable so
@@ -150,30 +131,13 @@ def _initial_coverage() -> dict:
         "closing_completed": False,
         "technical_topics": [],
         "technical_count": 0,
+        "project_count": 0,
     }
 
 
 def _compute_target_questions(duration_minutes: int) -> int:
-    """Duration → target question count.
-
-    Rough calibration from the product spec:
-      15 min → 5   (Intro → Tech → Project → Tech → Closing)
-      30 min → 7   (Intro → 2×Tech → Project → Coding → Behavioral → Closing)
-      45 min → 8
-      60 min → 9
-    Beyond 60 min we add ~1 question per 15 min, capped at the hard limit.
-    """
-    d = max(1, int(duration_minutes))
-    if d <= 15:
-        return 5
-    if d <= 30:
-        return 7
-    if d <= 45:
-        return 8
-    if d <= 60:
-        return 9
-    extra = (d - 60) // 15
-    return min(_HARD_QUESTION_CAP - 2, 9 + extra)
+    """Duration → target question count from ``settings/config.yaml``."""
+    return settings.interview.target_questions(duration_minutes)
 
 
 @dataclass(frozen=True)
@@ -288,16 +252,19 @@ class InterviewLifecycleService:
 
         ``duration_minutes`` drives the target question count and the pacing
         signals passed to the planner on every turn. It's clamped to
-        ``[DURATION_MIN_MINUTES, DURATION_MAX_MINUTES]``.
+        ``[settings.interview.duration_min_minutes,
+        settings.interview.duration_max_minutes]``.
         """
         jd = (job_description or "").strip()
-        if len(jd) < JD_MIN_CHARS:
+        if len(jd) < settings.interview.jd_min_chars:
             raise ValidationError(
-                f"Job description must be at least {JD_MIN_CHARS} characters."
+                f"Job description must be at least "
+                f"{settings.interview.jd_min_chars} characters."
             )
-        if len(jd) > JD_MAX_CHARS:
+        if len(jd) > settings.interview.jd_max_chars:
             raise ValidationError(
-                f"Job description must be at most {JD_MAX_CHARS} characters."
+                f"Job description must be at most "
+                f"{settings.interview.jd_max_chars} characters."
             )
 
         duration = _resolve_duration(duration_minutes)
@@ -421,13 +388,13 @@ class InterviewLifecycleService:
             role_name = role.name
             requirements = _clean_string_list(
                 role.requirements,
-                max_items=ROLE_REQUIREMENTS_MAX_ITEMS,
-                max_item_chars=ROLE_REQUIREMENT_MAX_CHARS,
+                max_items=settings.interview.role_requirements_max_items,
+                max_item_chars=settings.interview.role_requirement_max_chars,
             )
             skills = _clean_string_list(
                 role.skills,
-                max_items=ROLE_SKILLS_MAX_ITEMS,
-                max_item_chars=ROLE_SKILL_MAX_CHARS,
+                max_items=settings.interview.role_skills_max_items,
+                max_item_chars=settings.interview.role_skill_max_chars,
             )
             experience_min = role.experience_min
             experience_max = role.experience_max
@@ -435,13 +402,13 @@ class InterviewLifecycleService:
             role_name = (custom_role_name or "").strip()
             requirements = _clean_string_list(
                 custom_requirements,
-                max_items=ROLE_REQUIREMENTS_MAX_ITEMS,
-                max_item_chars=ROLE_REQUIREMENT_MAX_CHARS,
+                max_items=settings.interview.role_requirements_max_items,
+                max_item_chars=settings.interview.role_requirement_max_chars,
             )
             skills = _clean_string_list(
                 custom_skills,
-                max_items=ROLE_SKILLS_MAX_ITEMS,
-                max_item_chars=ROLE_SKILL_MAX_CHARS,
+                max_items=settings.interview.role_skills_max_items,
+                max_item_chars=settings.interview.role_skill_max_chars,
             )
             if len(role_name) < 2 or not requirements:
                 raise ValidationError(
@@ -1177,7 +1144,7 @@ class InterviewLifecycleService:
         Termination rules (any triggers "return None"):
           - the just-answered question was in stage ``CLOSING``,
           - we've asked ``total_target_questions`` questions,
-          - safety cap ``_HARD_QUESTION_CAP`` reached.
+          - safety cap ``settings.interview.hard_question_cap`` reached.
 
         Otherwise, update coverage from the answered question and delegate
         to the planner for the next one.
@@ -1208,7 +1175,7 @@ class InterviewLifecycleService:
             return None
         if answered_question.question_number >= total_target:
             return None
-        if answered_question.question_number >= _HARD_QUESTION_CAP:
+        if answered_question.question_number >= settings.interview.hard_question_cap:
             logger.warning(
                 "Hard question cap hit for session %s at Q%d",
                 session.id,
@@ -1291,14 +1258,28 @@ class InterviewLifecycleService:
         if question_number == 1 and planned.stage != "INTRODUCTION":
             planned = replace(
                 planned,
-                question_text=(
-                    "To start, please introduce yourself and summarize your "
-                    "background and relevant experience."
-                ),
+                question_text=INTRODUCTION_FALLBACK_QUESTION,
                 question_type="BEHAVIORAL",
                 stage="INTRODUCTION",
                 difficulty="EASY",
                 topic="introduction",
+                skill="communication",
+            )
+        elif (
+            question_number > 1
+            and planned.stage != "CLOSING"
+            and (
+                question_number >= total_target
+                or remaining <= 2.0
+            )
+        ):
+            planned = replace(
+                planned,
+                question_text=CLOSING_FALLBACK_QUESTION,
+                question_type="BEHAVIORAL",
+                stage="CLOSING",
+                difficulty="EASY",
+                topic="closing",
                 skill="communication",
             )
 
@@ -1404,7 +1385,9 @@ def _evaluation_lease_expired(session: InterviewSession) -> bool:
         return True
     if started_at.tzinfo is None:
         started_at = started_at.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) >= started_at + _EVALUATION_LEASE
+    return datetime.now(timezone.utc) >= started_at + timedelta(
+        minutes=settings.interview.evaluation_lease_minutes
+    )
 
 
 def _submission_eligible(session: InterviewSession) -> bool:
@@ -1431,16 +1414,20 @@ def _submission_eligible(session: InterviewSession) -> bool:
 def _resolve_duration(value: int | None) -> int:
     """Clamp the requested duration to the supported product range."""
     if value is None:
-        return DEFAULT_DURATION_MINUTES
+        return settings.interview.default_duration_minutes
     if not isinstance(value, int):  # pragma: no cover - pydantic already ints
         try:
             value = int(value)
         except (TypeError, ValueError) as exc:
             raise ValidationError("Duration must be an integer number of minutes.") from exc
-    if value < DURATION_MIN_MINUTES or value > DURATION_MAX_MINUTES:
+    if (
+        value < settings.interview.duration_min_minutes
+        or value > settings.interview.duration_max_minutes
+    ):
         raise ValidationError(
             "Interview duration must be between "
-            f"{DURATION_MIN_MINUTES} and {DURATION_MAX_MINUTES} minutes."
+            f"{settings.interview.duration_min_minutes} and "
+            f"{settings.interview.duration_max_minutes} minutes."
         )
     return value
 
@@ -1452,14 +1439,14 @@ def _read_total_target(state: dict | None) -> int:
     written by an older code path (defensive; new sessions always have it).
     """
     if not state:
-        return _compute_target_questions(DEFAULT_DURATION_MINUTES)
+        return _compute_target_questions(settings.interview.default_duration_minutes)
     total = state.get("total_target_questions")
     if isinstance(total, int) and total > 0:
         return total
     duration = state.get("duration_minutes")
     if isinstance(duration, int) and duration > 0:
         return _compute_target_questions(duration)
-    return _compute_target_questions(DEFAULT_DURATION_MINUTES)
+    return _compute_target_questions(settings.interview.default_duration_minutes)
 
 
 def _elapsed_and_remaining_minutes(
@@ -1507,6 +1494,7 @@ def _bump_coverage(coverage: dict, *, question: InterviewQuestion) -> dict:
         coverage["introduction_completed"] = True
     elif stage == "PROJECT":
         coverage["project_discussed"] = True
+        coverage["project_count"] = int(coverage.get("project_count") or 0) + 1
     elif stage == "CODING":
         coverage["coding_completed"] = True
     elif stage == "BEHAVIORAL":
@@ -1530,9 +1518,9 @@ def _snapshot_resume_text(resume: CurrentResume) -> str | None:
     if not resume.has_text:
         return None
     text = resume.extracted_text or ""
-    if len(text) <= _RESUME_SNAPSHOT_CHAR_LIMIT:
+    if len(text) <= settings.resume.snapshot_char_limit:
         return text
-    return text[:_RESUME_SNAPSHOT_CHAR_LIMIT]
+    return text[: settings.resume.snapshot_char_limit]
 
 
 def _clean_string_list(

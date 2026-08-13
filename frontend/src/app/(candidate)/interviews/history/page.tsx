@@ -421,7 +421,7 @@ function EmptyState() {
           Start a practice interview to see your history here.
         </p>
         <Button asChild variant="outline">
-          <Link href={ROUTES.candidate.interviews}>
+          <Link href={ROUTES.candidate.dashboard}>
             Start a Practice Interview
           </Link>
         </Button>

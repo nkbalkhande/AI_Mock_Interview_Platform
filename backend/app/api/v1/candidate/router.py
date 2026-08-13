@@ -89,10 +89,10 @@ async def upload_profile_photo(
     if not data:
         raise ValidationError("The photo file is empty.")
 
-    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    max_bytes = settings.storage.max_upload_size_mb * 1024 * 1024
     if len(data) > max_bytes:
         raise ValidationError(
-            f"Photo exceeds the {settings.MAX_UPLOAD_SIZE_MB}MB limit."
+            f"Photo exceeds the {settings.storage.max_upload_size_mb}MB limit."
         )
 
     content_type = (photo.content_type or "").lower()

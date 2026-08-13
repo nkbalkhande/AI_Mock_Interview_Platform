@@ -119,6 +119,7 @@ export default function UsersPage() {
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Organization</TableHead>
+                      <TableHead>Designation</TableHead>
                       <TableHead>Experience</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Joined</TableHead>
@@ -145,6 +146,9 @@ export default function UsersPage() {
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {user.current_organization ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {user.current_designation ?? "—"}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {user.years_of_experience

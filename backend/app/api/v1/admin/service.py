@@ -21,12 +21,15 @@ from app.api.v1.admin.schemas import (
     EvaluationDetailResponse,
     EvaluationListItem,
     EvaluationListResponse,
+    InterviewDetailEvent,
+    InterviewDetailQuestion,
     InterviewDetailResponse,
     InterviewListItem,
     InterviewListResponse,
     JobRoleItem,
     QuestionEvaluationDetail,
     RecentActivityItem,
+    SkillScoreItem,
     SubmitDecisionRequest,
     SubmitDecisionResponse,
     UpdateUserStatusRequest,
@@ -36,6 +39,7 @@ from app.api.v1.admin.schemas import (
     UserListItem,
     UserListResponse,
 )
+from app.core.config import settings
 from app.models.final_decision import FinalDecision
 from app.models.interview import Interview
 from app.models.interview_evaluation import InterviewEvaluation
@@ -90,6 +94,14 @@ class AdminService:
         total_interviews = await self.interviews.admin_count_all()
         pending_evaluations = await self.sessions.admin_count_pending_review()
         completed_interviews = await self.interviews.admin_count_completed()
+        in_progress_interviews = await self.interviews.admin_count_by_statuses(
+            ["IN_PROGRESS", "AVAILABLE"]
+        )
+        scheduled_upcoming = await self.interviews.admin_count_scheduled_upcoming()
+        cancelled_or_expired = await self.interviews.admin_count_by_statuses(
+            ["CANCELLED", "EXPIRED"]
+        )
+        average_ai_score = await self.sessions.admin_average_assigned_ai_score()
 
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
@@ -110,6 +122,8 @@ class AdminService:
                 description=_format_event(ev),
                 actor_name=ev.actor.full_name if ev.actor else None,
                 created_at=ev.created_at,
+                interview_id=ev.interview_id,
+                session_id=ev.session_id,
             )
             for ev in events
         ]
@@ -120,6 +134,10 @@ class AdminService:
                 total_interviews=total_interviews,
                 pending_evaluations=pending_evaluations,
                 completed_interviews=completed_interviews,
+                in_progress_interviews=in_progress_interviews,
+                scheduled_upcoming=scheduled_upcoming,
+                cancelled_or_expired=cancelled_or_expired,
+                average_ai_score=average_ai_score,
             ),
             recent_activity=activity,
         )
@@ -152,13 +170,42 @@ class AdminService:
             items=items, total=total, page=page, page_size=page_size
         )
 
-    async def get_user_detail(self, user_id: uuid.UUID) -> UserDetailResponse | None:
+    async def get_user_detail(
+        self,
+        user_id: uuid.UUID,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> UserDetailResponse | None:
         user = await self.users.get_detail(user_id)
         if user is None:
             return None
 
         total_interviews = await self.interviews.admin_count_for_user(user_id)
-        interview_rows = await self.interviews.admin_list_for_user(user_id, limit=20)
+        practice_count = await self.interviews.admin_count_for_user_by_type(
+            user_id, interview_type="PRACTICE"
+        )
+        assigned_count = await self.interviews.admin_count_for_user_by_type(
+            user_id, interview_type="ASSIGNED"
+        )
+        completed_count = await self.interviews.admin_count_for_user_completed(user_id)
+        interview_rows = await self.interviews.admin_list_for_user(
+            user_id, page=page, page_size=page_size
+        )
+
+        from sqlalchemy import select
+
+        resume_version_stmt = (
+            select(ResumeVersion)
+            .join(Resume, ResumeVersion.resume_id == Resume.id)
+            .where(
+                Resume.user_id == user_id,
+                ResumeVersion.is_current.is_(True),
+            )
+        )
+        resume_version = (
+            await self.session.execute(resume_version_stmt)
+        ).scalar_one_or_none()
 
         profile = user.profile
         return UserDetailResponse(
@@ -177,6 +224,11 @@ class AdminService:
             created_at=user.created_at,
             last_login_at=user.last_login_at,
             total_interviews=total_interviews,
+            practice_count=practice_count,
+            assigned_count=assigned_count,
+            completed_count=completed_count,
+            resume_file_name=resume_version.file_name if resume_version else None,
+            resume_file_path=resume_version.file_path if resume_version else None,
             interviews=[
                 UserInterviewSummary(
                     interview_id=iv.id,
@@ -188,6 +240,9 @@ class AdminService:
                 )
                 for iv in interview_rows
             ],
+            interviews_total=total_interviews,
+            interviews_page=page,
+            interviews_page_size=page_size,
         )
 
     async def update_user_status(
@@ -224,7 +279,32 @@ class AdminService:
             interview_type=interview_type,
             search=search,
         )
-        items = [self._to_interview_list_item(iv) for iv in rows]
+        interview_ids = [iv.id for iv in rows]
+        latest_sessions = await self.sessions.latest_session_by_interview(
+            interview_ids
+        )
+        finals = await self.sessions.latest_final_evaluation_for_interviews(
+            interview_ids
+        )
+        counts = await self.sessions.question_counts_by_session(
+            [session.id for session in latest_sessions.values()]
+        )
+        items = []
+        for iv in rows:
+            session = latest_sessions.get(iv.id)
+            evaluation = finals.get(iv.id)
+            total_questions, answered_count = (
+                counts.get(session.id, (0, 0)) if session else (0, 0)
+            )
+            items.append(
+                self._to_interview_list_item(
+                    iv,
+                    session=session,
+                    evaluation=evaluation,
+                    answered=answered_count,
+                    total_qs=total_questions,
+                )
+            )
         return InterviewListResponse(
             items=items, total=total, page=page, page_size=page_size
         )
@@ -235,6 +315,101 @@ class AdminService:
         iv = await self.interviews.admin_get_detail(interview_id)
         if iv is None:
             return None
+
+        latest_sessions = await self.sessions.latest_session_by_interview([iv.id])
+        session = latest_sessions.get(iv.id)
+        detail_session: InterviewSession | None = None
+        if session is not None:
+            detail_session = await self.sessions.admin_get_evaluation_detail(
+                session.id
+            )
+            if detail_session is not None:
+                session = detail_session
+
+        final_eval: InterviewEvaluation | None = None
+        questions: list[InterviewDetailQuestion] = []
+        answered_count = 0
+        total_questions = 0
+        if detail_session is not None:
+            final_eval = next(
+                (
+                    evaluation
+                    for evaluation in detail_session.evaluations
+                    if evaluation.evaluation_type == "FINAL"
+                ),
+                None,
+            )
+            total_questions = len(detail_session.questions)
+            answered_count = sum(
+                1
+                for question in detail_session.questions
+                if question.answer is not None and question.answer.is_submitted
+            )
+            for question in sorted(
+                detail_session.questions, key=lambda item: item.question_number
+            ):
+                question_eval = next(
+                    (
+                        evaluation
+                        for evaluation in question.evaluations
+                        if evaluation.evaluation_type == "QUESTION"
+                    ),
+                    None,
+                )
+                questions.append(
+                    InterviewDetailQuestion(
+                        question_number=question.question_number,
+                        question_text=question.question_text,
+                        question_type=question.question_type,
+                        difficulty=question.difficulty,
+                        candidate_answer=(
+                            question.answer.answer_text
+                            if question.answer is not None
+                            else None
+                        ),
+                        overall_score=(
+                            question_eval.overall_score if question_eval else None
+                        ),
+                        feedback=question_eval.feedback if question_eval else None,
+                    )
+                )
+        elif session is not None:
+            counts = await self.sessions.question_counts_by_session([session.id])
+            total_questions, answered_count = counts.get(session.id, (0, 0))
+            finals = await self.sessions.latest_final_evaluation_for_interviews(
+                [iv.id]
+            )
+            final_eval = finals.get(iv.id)
+
+        actor_ids = {
+            event.actor_user_id
+            for event in iv.events
+            if event.actor_user_id is not None
+        }
+        actor_names: dict[uuid.UUID, str] = {}
+        if actor_ids:
+            from sqlalchemy import select
+
+            actor_rows = await self.session.execute(
+                select(User.id, User.full_name).where(User.id.in_(actor_ids))
+            )
+            actor_names = dict(actor_rows.all())
+
+        detail_events = [
+            InterviewDetailEvent(
+                id=event.id,
+                event_type=event.event_type,
+                description=_format_event(event),
+                actor_name=actor_names.get(event.actor_user_id),
+                created_at=event.created_at,
+            )
+            for event in sorted(
+                iv.events, key=lambda item: item.created_at, reverse=True
+            )[:10]
+        ]
+
+        decision = session.final_decision if session is not None else None
+        resume_version = iv.resume_version
         return InterviewDetailResponse(
             id=iv.id,
             candidate_id=iv.candidate_id,
@@ -259,6 +434,29 @@ class AdminService:
             ),
             created_at=iv.created_at,
             updated_at=iv.updated_at,
+            display_status=self._derive_display_status(
+                iv.status, session.status if session else None
+            ),
+            session_id=session.id if session else None,
+            session_status=session.status if session else None,
+            started_at=session.started_at if session else None,
+            completed_at=session.ended_at if session else None,
+            overall_score=final_eval.overall_score if final_eval else None,
+            technical_score=final_eval.technical_score if final_eval else None,
+            communication_score=(
+                final_eval.communication_score if final_eval else None
+            ),
+            reasoning_score=final_eval.reasoning_score if final_eval else None,
+            ai_verdict=final_eval.ai_verdict if final_eval else None,
+            strengths=_coerce_str_list(final_eval.strengths if final_eval else []),
+            weaknesses=_coerce_str_list(final_eval.weaknesses if final_eval else []),
+            admin_decision=decision.admin_decision if decision else None,
+            answered_count=answered_count,
+            total_questions=total_questions,
+            questions=questions,
+            resume_file_name=resume_version.file_name if resume_version else None,
+            resume_file_path=resume_version.file_path if resume_version else None,
+            events=detail_events,
         )
 
     async def assign_interview(
@@ -293,9 +491,12 @@ class AdminService:
             job_role = await self.job_roles.get_by_id(request.job_role_id)
 
         now = datetime.now(timezone.utc)
-        access_start = request.scheduled_at - timedelta(minutes=5)
+        access_start = request.scheduled_at - timedelta(
+            minutes=settings.interview.access_open_minutes_before
+        )
         access_end = request.scheduled_at + timedelta(
-            minutes=request.duration_minutes + 10
+            minutes=request.duration_minutes
+            + settings.interview.access_close_minutes_after_duration
         )
 
         interview = Interview(
@@ -396,11 +597,17 @@ class AdminService:
     # ------------------------------------------------------------------
 
     async def list_evaluations(
-        self, *, page: int = 1, page_size: int = 20
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        review_state: str = "pending",
     ) -> EvaluationListResponse:
-        total = await self.sessions.admin_count_pending_review()
+        total = await self.sessions.admin_count_for_review(
+            review_state=review_state
+        )
         rows = await self.sessions.admin_list_for_review(
-            page=page, page_size=page_size
+            page=page, page_size=page_size, review_state=review_state
         )
         items = [self._to_evaluation_list_item(s) for s in rows]
         return EvaluationListResponse(
@@ -489,6 +696,17 @@ class AdminService:
             ),
             decided_at=decision.decided_at if decision else None,
             questions=questions_detail,
+            skill_scores=[
+                SkillScoreItem(
+                    skill_name=skill.skill_name,
+                    score=skill.score,
+                    max_score=skill.max_score,
+                    evidence=_coerce_str_list(skill.evidence),
+                )
+                for skill in sorted(
+                    session.skill_scores, key=lambda item: item.skill_name
+                )
+            ],
             session_status=session.status,
             session_started_at=session.started_at,
             session_ended_at=session.ended_at,
@@ -617,8 +835,15 @@ class AdminService:
             last_login_at=user.last_login_at,
         )
 
-    @staticmethod
-    def _to_interview_list_item(iv: Interview) -> InterviewListItem:
+    def _to_interview_list_item(
+        self,
+        iv: Interview,
+        *,
+        session: InterviewSession | None = None,
+        evaluation: InterviewEvaluation | None = None,
+        answered: int = 0,
+        total_qs: int = 0,
+    ) -> InterviewListItem:
         return InterviewListItem(
             id=iv.id,
             candidate_id=iv.candidate_id,
@@ -634,7 +859,48 @@ class AdminService:
                 iv.assigned_by_user.full_name if iv.assigned_by_user else None
             ),
             created_at=iv.created_at,
+            display_status=self._derive_display_status(
+                iv.status, session.status if session else None
+            ),
+            session_id=session.id if session else None,
+            started_at=session.started_at if session else None,
+            completed_at=session.ended_at if session else None,
+            overall_score=evaluation.overall_score if evaluation else None,
+            admin_decision=(
+                session.final_decision.admin_decision
+                if session and session.final_decision
+                else None
+            ),
+            answered_count=answered,
+            total_questions=total_qs,
         )
+
+    @staticmethod
+    def _derive_display_status(
+        interview_status: str,
+        session_status: str | None,
+    ) -> str:
+        if interview_status == "COMPLETED":
+            return "Completed"
+        if interview_status == "CANCELLED":
+            return "Cancelled"
+        if interview_status == "EXPIRED":
+            return "Expired"
+        if interview_status in ("SUBMITTED", "AI_EVALUATED", "ADMIN_REVIEW"):
+            return "Evaluating"
+        if interview_status == "IN_PROGRESS":
+            if session_status == "ABANDONED":
+                return "Abandoned"
+            if session_status == "PAUSED":
+                return "Paused"
+            return "In Progress"
+        if session_status == "ABANDONED":
+            return "Abandoned"
+        if session_status == "PAUSED":
+            return "Paused"
+        if interview_status in ("ASSIGNED", "SCHEDULED", "AVAILABLE"):
+            return "Not Started"
+        return interview_status.replace("_", " ").title()
 
     @staticmethod
     def _to_evaluation_list_item(session: InterviewSession) -> EvaluationListItem:
@@ -653,6 +919,7 @@ class AdminService:
             interview_type=interview.interview_type if interview else "",
             ai_overall_score=final_eval.overall_score if final_eval else None,
             ai_verdict=final_eval.ai_verdict if final_eval else None,
+            admin_decision=decision.admin_decision if decision else None,
             status=session.status,
             submitted_at=session.ended_at,
         )

@@ -1,6 +1,6 @@
 """Serve uploaded files from local storage.
 
-Files are stored under ``settings.STORAGE_ROOT`` with random UUID-based names.
+Files are stored under ``settings.storage.root`` with random UUID-based names.
 This endpoint resolves the storage-relative path and streams the file back.
 Only files within the storage root are served (path-traversal is blocked).
 """

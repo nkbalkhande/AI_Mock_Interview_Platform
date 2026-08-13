@@ -19,10 +19,10 @@ from app.core.config import settings
 # Single application-wide engine (manages the connection pool).
 engine: AsyncEngine = create_async_engine(
     settings.async_database_url,
-    echo=settings.DB_ECHO,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_timeout=settings.DB_POOL_TIMEOUT,
+    echo=settings.postgres.echo,
+    pool_size=settings.postgres.pool_size,
+    max_overflow=settings.postgres.max_overflow,
+    pool_timeout=settings.postgres.pool_timeout,
     pool_pre_ping=True,
     future=True,
 )

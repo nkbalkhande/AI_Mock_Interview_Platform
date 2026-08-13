@@ -13,6 +13,10 @@ export interface AdminDashboardStats {
   total_interviews: number;
   pending_evaluations: number;
   completed_interviews: number;
+  in_progress_interviews: number;
+  scheduled_upcoming: number;
+  cancelled_or_expired: number;
+  average_ai_score: string | null;
 }
 
 export interface RecentActivityItem {
@@ -21,6 +25,8 @@ export interface RecentActivityItem {
   description: string;
   actor_name: string | null;
   created_at: string;
+  interview_id: string | null;
+  session_id: string | null;
 }
 
 export interface AdminDashboardResponse {
@@ -78,7 +84,15 @@ export interface UserDetailResponse {
   created_at: string;
   last_login_at: string | null;
   total_interviews: number;
+  practice_count: number;
+  assigned_count: number;
+  completed_count: number;
+  resume_file_name: string | null;
+  resume_file_path: string | null;
   interviews: UserInterviewSummary[];
+  interviews_total: number;
+  interviews_page: number;
+  interviews_page_size: number;
 }
 
 export interface UpdateUserStatusResponse {
@@ -99,10 +113,18 @@ export interface InterviewListItem {
   practice_type: string | null;
   role: string | null;
   status: string;
+  display_status: string | null;
   scheduled_at: string | null;
   duration_minutes: number;
   assigned_by_name: string | null;
   created_at: string;
+  session_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  overall_score: string | null;
+  admin_decision: string | null;
+  answered_count: number;
+  total_questions: number;
 }
 
 export interface InterviewListResponse {
@@ -110,6 +132,24 @@ export interface InterviewListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface InterviewDetailQuestion {
+  question_number: number;
+  question_text: string;
+  question_type: string;
+  difficulty: string | null;
+  candidate_answer: string | null;
+  overall_score: string | null;
+  feedback: string | null;
+}
+
+export interface InterviewDetailEvent {
+  id: string;
+  event_type: string;
+  description: string;
+  actor_name: string | null;
+  created_at: string;
 }
 
 export interface InterviewDetailResponse {
@@ -125,6 +165,7 @@ export interface InterviewDetailResponse {
   required_experience_min: string | null;
   required_experience_max: string | null;
   status: string;
+  display_status: string | null;
   scheduled_at: string | null;
   timezone: string | null;
   duration_minutes: number;
@@ -134,6 +175,24 @@ export interface InterviewDetailResponse {
   assigned_by_name: string | null;
   created_at: string;
   updated_at: string;
+  session_id: string | null;
+  session_status: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  overall_score: string | null;
+  technical_score: string | null;
+  communication_score: string | null;
+  reasoning_score: string | null;
+  ai_verdict: string | null;
+  strengths: string[];
+  weaknesses: string[];
+  admin_decision: string | null;
+  answered_count: number;
+  total_questions: number;
+  questions: InterviewDetailQuestion[];
+  resume_file_name: string | null;
+  resume_file_path: string | null;
+  events: InterviewDetailEvent[];
 }
 
 export interface AssignInterviewRequest {
@@ -172,6 +231,7 @@ export interface EvaluationListItem {
   interview_type: string;
   ai_overall_score: string | null;
   ai_verdict: string | null;
+  admin_decision: string | null;
   status: string;
   submitted_at: string | null;
 }
@@ -200,6 +260,13 @@ export interface QuestionEvaluationDetail {
   weaknesses: string[];
 }
 
+export interface SkillScoreItem {
+  skill_name: string;
+  score: string | null;
+  max_score: string | null;
+  evidence: string[];
+}
+
 export interface EvaluationDetailResponse {
   session_id: string;
   interview_id: string;
@@ -222,6 +289,7 @@ export interface EvaluationDetailResponse {
   decided_by_name: string | null;
   decided_at: string | null;
   questions: QuestionEvaluationDetail[];
+  skill_scores: SkillScoreItem[];
   session_status: string;
   session_started_at: string | null;
   session_ended_at: string | null;

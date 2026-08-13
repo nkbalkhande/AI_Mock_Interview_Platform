@@ -1,0 +1,49 @@
+# =============================================================================
+# LLM switchboard — change the model here, then restart the backend.
+# LiteLLM reads the prefix and pulls the matching API key / endpoint from
+# backend/.env (see providers below). Do not put secrets in this file.
+# =============================================================================
+
+provider: litellm
+
+# Uncomment exactly one chat model:
+model: openai/gpt-5
+# model: openai/gpt-4o
+# model: azure/gpt-4o
+# model: anthropic/claude-sonnet-4-5
+# model: gemini/gemini-2.0-flash
+
+temperature: 0.4
+# GPT-5 / o-series ignore this and use the API default (1). Do not send
+# a custom temperature to those models — OpenAI returns 400.
+# Hard ceiling on generated tokens. GPT-5 / reasoning models need this
+# (they reject max_tokens). Keep it high enough that hidden reasoning
+# cannot consume the whole budget and return an empty answer.
+max_completion_tokens: 8192
+# Seconds per chat request.
+timeout: 45
+kwargs: {}
+
+embedding:
+  provider: litellm
+  # Must match vectordb.qdrant.dense_dim in settings/config.yaml (1536 for
+  # text-embedding-3-small).
+  model: openai/text-embedding-3-small
+  # model: azure/text-embedding-3-small
+  dimensions: 1536
+  timeout: 60
+
+# Connection details LiteLLM uses based on the model prefix.
+# API keys stay in backend/.env:
+#   openai/     → OPENAI_API_KEY
+#   azure/      → AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT
+#   anthropic/  → ANTHROPIC_API_KEY
+#   gemini/     → GEMINI_API_KEY  (or GOOGLE_API_KEY)
+providers:
+  openai: {}
+  azure:
+    api_version: "2024-08-01-preview"
+    # Optional override; otherwise AZURE_OPENAI_ENDPOINT from .env is used.
+    api_base: null
+  anthropic: {}
+  gemini: {}

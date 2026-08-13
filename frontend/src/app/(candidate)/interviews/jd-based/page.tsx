@@ -14,61 +14,46 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { usePublicConfig } from "@/features/config/hooks";
+import { PUBLIC_CONFIG_FALLBACK } from "@/features/config/types";
 import { useStartJdPractice } from "@/features/interviews/hooks";
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-// Kept in lockstep with the backend limits in
-// ``services.interviews.lifecycle_service`` — if either side moves, keep
-// the numbers matched so the UX matches what actually validates server-side.
-const JD_MIN_CHARS = 200;
-const JD_MAX_CHARS = 20000;
-
-interface DurationOption {
-  minutes: number;
-  label: string;
-  description: string;
-}
-
-// Options mirror the backend's ``_compute_target_questions`` bands so the
-// user's picked duration → expected question count description is honest.
-const DURATION_OPTIONS: DurationOption[] = [
-  { minutes: 15, label: "15 min", description: "~5 questions" },
-  { minutes: 30, label: "30 min", description: "~7 questions" },
-  { minutes: 45, label: "45 min", description: "~8 questions" },
-  { minutes: 60, label: "60 min", description: "~9 questions" },
-];
-
-const DEFAULT_DURATION_MINUTES = 30;
-
 export default function JdBasedInterviewPage() {
   const router = useRouter();
+  const { data: publicConfig } = usePublicConfig();
+  const interview = publicConfig?.interview ?? PUBLIC_CONFIG_FALLBACK.interview;
+  const jdMinChars = interview.jd_min_chars;
+  const jdMaxChars = interview.jd_max_chars;
+  const durationOptions = interview.duration_options;
   const [jd, setJd] = useState("");
   const [durationMinutes, setDurationMinutes] = useState<number>(
-    DEFAULT_DURATION_MINUTES,
+    interview.default_duration_minutes,
   );
   const mutation = useStartJdPractice();
 
   const trimmedLength = useMemo(() => jd.trim().length, [jd]);
   const validationMessage = useMemo(() => {
     if (trimmedLength === 0) return null;
-    if (trimmedLength < JD_MIN_CHARS) {
-      return `Add ${JD_MIN_CHARS - trimmedLength} more characters — the AI needs enough detail to interview you well.`;
+    if (trimmedLength < jdMinChars) {
+      return `Add ${jdMinChars - trimmedLength} more characters — the AI needs enough detail to interview you well.`;
     }
-    if (trimmedLength > JD_MAX_CHARS) {
-      return `Job description is too long by ${trimmedLength - JD_MAX_CHARS} characters.`;
+    if (trimmedLength > jdMaxChars) {
+      return `Job description is too long by ${trimmedLength - jdMaxChars} characters.`;
     }
     return null;
-  }, [trimmedLength]);
+  }, [trimmedLength, jdMinChars, jdMaxChars]);
 
   const isValid =
-    trimmedLength >= JD_MIN_CHARS && trimmedLength <= JD_MAX_CHARS;
+    trimmedLength >= jdMinChars && trimmedLength <= jdMaxChars;
 
   const selectedOption = useMemo(
     () =>
-      DURATION_OPTIONS.find((opt) => opt.minutes === durationMinutes) ??
-      DURATION_OPTIONS[1],
-    [durationMinutes],
+      durationOptions.find((opt) => opt.minutes === durationMinutes) ??
+      durationOptions[1] ??
+      durationOptions[0],
+    [durationMinutes, durationOptions],
   );
 
   async function handleStart() {
@@ -144,7 +129,7 @@ export default function JdBasedInterviewPage() {
           aria-label="Interview length in minutes"
         >
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {DURATION_OPTIONS.map((opt) => {
+            {durationOptions.map((opt) => {
               const selected = opt.minutes === durationMinutes;
               return (
                 <button
@@ -179,7 +164,7 @@ export default function JdBasedInterviewPage() {
                         : "text-muted-foreground",
                     )}
                   >
-                    {opt.description}
+                    {`~${opt.question_count} questions`}
                   </span>
                 </button>
               );
@@ -190,7 +175,7 @@ export default function JdBasedInterviewPage() {
             <span className="font-medium text-foreground">
               {selectedOption.label}
             </span>{" "}
-            · {selectedOption.description}. The AI decides the flow — expect
+            · ~{selectedOption.question_count} questions. The AI decides the flow — expect
             introduction, technical depth, project questions, and a wrap-up.
           </p>
         </CardContent>
@@ -207,17 +192,17 @@ export default function JdBasedInterviewPage() {
             </label>
             <span
               className={
-                trimmedLength > JD_MAX_CHARS
+                trimmedLength > jdMaxChars
                   ? "text-xs tabular-nums text-destructive"
                   : "text-xs tabular-nums text-muted-foreground"
               }
             >
               {trimmedLength.toLocaleString()} /{" "}
-              {JD_MAX_CHARS.toLocaleString()} characters
+              {jdMaxChars.toLocaleString()} characters
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Minimum {JD_MIN_CHARS} characters. Include responsibilities,
+            Minimum {jdMinChars} characters. Include responsibilities,
             required skills, and any tech stack details for the best results.
           </p>
         </CardHeader>
@@ -228,7 +213,7 @@ export default function JdBasedInterviewPage() {
             value={jd}
             onChange={(e) => setJd(e.target.value)}
             placeholder="Paste the complete job description here — role summary, responsibilities, required qualifications, and tech stack…"
-            maxLength={JD_MAX_CHARS + 100}
+            maxLength={jdMaxChars + 100}
             disabled={mutation.isPending}
             aria-invalid={validationMessage !== null && !mutation.isPending}
             aria-describedby={validationMessage ? "jd-validation" : undefined}

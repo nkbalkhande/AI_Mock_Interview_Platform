@@ -38,7 +38,7 @@ def _transcribe_sync(audio_bytes: bytes, filename: str) -> str:
 
     transcription = client.audio.transcriptions.create(
         file=(filename, audio_file),
-        model=settings.STT_MODEL,
+        model=settings.voice.stt_model,
         response_format="text",
     )
     return str(transcription).strip()

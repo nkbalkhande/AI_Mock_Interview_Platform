@@ -24,6 +24,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.database import get_db
+from app.core.config import settings
 from app.core.constants import AUTH_HEADER_PREFIX
 from app.core.exceptions import AuthenticationError, PermissionDeniedError
 from app.core.security import ACCESS_TOKEN_TYPE, decode_token
@@ -35,7 +36,7 @@ from app.repositories.user_repository import UserRepository
 # ever changes, both places must move together — colocating a constant here
 # means the auth dependency never has to import the router module (avoids a
 # circular import between routers and this shared dependency).
-ACCESS_COOKIE_NAME = "session"  # noqa: S105 - cookie name, not a secret
+ACCESS_COOKIE_NAME = settings.auth.access_cookie_name
 
 
 def _extract_token(request: Request) -> str:

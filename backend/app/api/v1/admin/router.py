@@ -85,11 +85,15 @@ async def list_users(
 @router.get("/users/{user_id}", response_model=UserDetailResponse)
 async def get_user_detail(
     user_id: uuid.UUID,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
     current_user: User = Depends(require_roles(RoleName.ADMIN)),
     service: AdminService = Depends(get_admin_service),
 ) -> UserDetailResponse:
     """Full user detail including profile and interview history."""
-    result = await service.get_user_detail(user_id)
+    result = await service.get_user_detail(
+        user_id, page=page, page_size=page_size
+    )
     if result is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return result
@@ -189,11 +193,22 @@ async def cancel_interview(
 async def list_evaluations(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=50),
+    review_state: str = Query(
+        default="pending",
+        description="pending | completed | all",
+    ),
     current_user: User = Depends(require_roles(RoleName.ADMIN)),
     service: AdminService = Depends(get_admin_service),
 ) -> EvaluationListResponse:
-    """List sessions that are pending admin review."""
-    return await service.list_evaluations(page=page, page_size=page_size)
+    """List evaluation sessions filtered by review state."""
+    if review_state not in ("pending", "completed", "all"):
+        raise HTTPException(
+            status_code=400,
+            detail="review_state must be pending, completed, or all.",
+        )
+    return await service.list_evaluations(
+        page=page, page_size=page_size, review_state=review_state
+    )
 
 
 @router.get(

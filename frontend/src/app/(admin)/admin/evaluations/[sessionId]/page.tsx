@@ -81,20 +81,27 @@ export default function EvaluationDetailPage({
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href={ROUTES.admin.evaluations}>
-            <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href={ROUTES.admin.evaluations}>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Evaluation Review
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {data.candidate_name} &middot; {data.role ?? "N/A"}
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`${ROUTES.admin.interviews}/${data.interview_id}`}>
+            View Interview
           </Link>
         </Button>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Evaluation Review
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {data.candidate_name} &middot; {data.role ?? "N/A"}
-          </p>
-        </div>
       </div>
 
       {/* AI Summary */}
@@ -144,6 +151,41 @@ export default function EvaluationDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {data.skill_scores.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Skill Scores</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {data.skill_scores.map((skill) => (
+                <div
+                  key={skill.skill_name}
+                  className="rounded-md border border-border p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{skill.skill_name}</p>
+                    <span className="font-mono text-sm">
+                      {formatScore(skill.score)}
+                      {skill.max_score != null && skill.max_score !== ""
+                        ? ` / ${Number(skill.max_score).toFixed(1)}`
+                        : ""}
+                    </span>
+                  </div>
+                  {skill.evidence.length > 0 ? (
+                    <ul className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+                      {skill.evidence.map((ev, i) => (
+                        <li key={i}>&bull; {ev}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Strengths / Weaknesses / Improvement */}
       {(data.ai_strengths.length > 0 ||

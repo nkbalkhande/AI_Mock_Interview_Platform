@@ -246,6 +246,30 @@ class InterviewSessionRepository(BaseRepository[InterviewSession]):
 
     async def admin_count_pending_review(self) -> int:
         """Count sessions ready for admin evaluation (AI done, no admin decision yet)."""
+        return await self.admin_count_for_review(review_state="pending")
+
+    async def admin_average_assigned_ai_score(self) -> Decimal | None:
+        """Average FINAL overall_score across assigned interviews with AI evaluations."""
+        stmt = (
+            select(func.avg(InterviewEvaluation.overall_score))
+            .select_from(InterviewEvaluation)
+            .join(
+                InterviewSession,
+                InterviewEvaluation.session_id == InterviewSession.id,
+            )
+            .join(Interview, InterviewSession.interview_id == Interview.id)
+            .where(
+                Interview.interview_type == "ASSIGNED",
+                InterviewEvaluation.evaluation_type == "FINAL",
+                InterviewEvaluation.overall_score.is_not(None),
+            )
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def admin_count_for_review(
+        self, *, review_state: str = "pending"
+    ) -> int:
+        """Count reviewable assigned sessions filtered by review state."""
         stmt = (
             select(func.count(InterviewSession.id))
             .select_from(InterviewSession)
@@ -258,9 +282,9 @@ class InterviewSessionRepository(BaseRepository[InterviewSession]):
                 Interview.interview_type == "ASSIGNED",
                 Interview.status.in_(self._REVIEW_INTERVIEW_STATUSES),
                 InterviewSession.status.in_(self._REVIEWABLE_STATUSES),
-                FinalDecision.admin_decision.is_(None),
             )
         )
+        stmt = self._apply_review_state_filter(stmt, review_state=review_state)
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def admin_list_for_review(
@@ -268,8 +292,9 @@ class InterviewSessionRepository(BaseRepository[InterviewSession]):
         *,
         page: int = 1,
         page_size: int = 20,
+        review_state: str = "pending",
     ) -> Sequence[InterviewSession]:
-        """Sessions awaiting admin review, with interview + candidate eager-loaded."""
+        """Sessions for admin review, with interview + candidate eager-loaded."""
         offset = (page - 1) * page_size
         stmt = (
             select(InterviewSession)
@@ -294,8 +319,16 @@ class InterviewSessionRepository(BaseRepository[InterviewSession]):
             .offset(offset)
             .limit(page_size)
         )
+        stmt = self._apply_review_state_filter(stmt, review_state=review_state)
         result = await self.session.execute(stmt)
         return result.scalars().unique().all()
+
+    def _apply_review_state_filter(self, stmt, *, review_state: str):  # noqa: ANN001, ANN202
+        if review_state == "pending":
+            return stmt.where(FinalDecision.admin_decision.is_(None))
+        if review_state == "completed":
+            return stmt.where(FinalDecision.admin_decision.is_not(None))
+        return stmt
 
     async def admin_get_evaluation_detail(
         self, session_id: uuid.UUID

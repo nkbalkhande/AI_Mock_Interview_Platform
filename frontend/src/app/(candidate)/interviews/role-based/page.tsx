@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { usePublicConfig } from "@/features/config/hooks";
+import { PUBLIC_CONFIG_FALLBACK } from "@/features/config/types";
 import {
   useJobRoles,
   useStartRolePractice,
@@ -20,18 +22,19 @@ import {
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-const DURATIONS = [15, 30, 45, 60];
-const MAX_REQUIREMENTS = 20;
-const MAX_REQUIREMENT_LENGTH = 300;
-const MAX_SKILLS = 30;
-const MAX_SKILL_LENGTH = 100;
-
 export default function RoleBasedInterviewPage() {
   const router = useRouter();
+  const { data: publicConfig } = usePublicConfig();
+  const interview = publicConfig?.interview ?? PUBLIC_CONFIG_FALLBACK.interview;
+  const durationOptions = interview.duration_options;
+  const maxRequirements = interview.role_requirements_max_items;
+  const maxRequirementLength = interview.role_requirement_max_chars;
+  const maxSkills = interview.role_skills_max_items;
+  const maxSkillLength = interview.role_skill_max_chars;
   const roles = useJobRoles();
   const start = useStartRolePractice();
   const [selection, setSelection] = useState<string | null>(null);
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState(interview.default_duration_minutes);
   const [customName, setCustomName] = useState("");
   const [customRequirements, setCustomRequirements] = useState("");
   const [customSkills, setCustomSkills] = useState("");
@@ -52,10 +55,10 @@ export default function RoleBasedInterviewPage() {
   const customInputValid =
     customName.trim().length >= 2 &&
     requirements.length > 0 &&
-    requirements.length <= MAX_REQUIREMENTS &&
-    requirements.every((item) => item.length <= MAX_REQUIREMENT_LENGTH) &&
-    skills.length <= MAX_SKILLS &&
-    skills.every((item) => item.length <= MAX_SKILL_LENGTH);
+    requirements.length <= maxRequirements &&
+    requirements.every((item) => item.length <= maxRequirementLength) &&
+    skills.length <= maxSkills &&
+    skills.every((item) => item.length <= maxSkillLength);
   const canStart =
     catalogReady && (isCustom ? customInputValid : Boolean(selectedRole));
 
@@ -199,10 +202,10 @@ export default function RoleBasedInterviewPage() {
                 onChange={(event) => setCustomRequirements(event.target.value)}
                 className="min-h-28 rounded-md border bg-transparent px-3 py-2 font-normal"
                 placeholder={"Design reliable distributed systems\nOperate cloud infrastructure"}
-                maxLength={MAX_REQUIREMENTS * (MAX_REQUIREMENT_LENGTH + 1)}
+                maxLength={maxRequirements * (maxRequirementLength + 1)}
               />
               <span className="text-xs font-normal text-muted-foreground">
-                Up to {MAX_REQUIREMENTS} items, {MAX_REQUIREMENT_LENGTH} characters each.
+                Up to {maxRequirements} items, {maxRequirementLength} characters each.
               </span>
             </label>
             <label className="grid gap-1 text-sm font-medium">
@@ -212,10 +215,10 @@ export default function RoleBasedInterviewPage() {
                 onChange={(event) => setCustomSkills(event.target.value)}
                 className="rounded-md border bg-transparent px-3 py-2 font-normal"
                 placeholder="Python, Kubernetes, System Design"
-                maxLength={MAX_SKILLS * (MAX_SKILL_LENGTH + 1)}
+                maxLength={maxSkills * (maxSkillLength + 1)}
               />
               <span className="text-xs font-normal text-muted-foreground">
-                Up to {MAX_SKILLS} items, {MAX_SKILL_LENGTH} characters each.
+                Up to {maxSkills} items, {maxSkillLength} characters each.
               </span>
             </label>
           </CardContent>
@@ -234,7 +237,8 @@ export default function RoleBasedInterviewPage() {
               aria-label="Interview duration in minutes"
               className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4"
             >
-              {DURATIONS.map((minutes) => {
+              {durationOptions.map((option) => {
+                const minutes = option.minutes;
                 const selected = duration === minutes;
                 return (
                   <button

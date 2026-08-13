@@ -216,6 +216,7 @@ function PlayerBody({ sessionId, data }: PlayerBodyProps) {
             <InterviewerVoice
               isTtsPlaying={tts.isPlaying}
               hasError={tts.hasError}
+              isBlocked={tts.isBlocked}
               onReplay={() => tts.speak(question.question_text)}
               onStop={tts.stop}
               disabled={isBusy || mic.isRecording}

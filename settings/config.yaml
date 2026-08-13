@@ -1,0 +1,123 @@
+# AI Mock Interview Platform — application config
+#
+# Tunables live here so timeouts, collections, and interview limits
+# can change without code edits. Chat/embedding models live in
+# settings/llm.yaml. Secrets go in backend/.env.
+#
+# Secrets and local overrides (API keys, DB password, JWT secret) go in
+# backend/.env — see backend/.env.example.
+#
+# Env vars override YAML. Nested keys use LLM__MODEL style if needed.
+
+app:
+  name: AI Mock Interview Platform
+  env: development
+  debug: true
+  api_v1_prefix: /api/v1
+  cors_origins:
+    - http://localhost:3000
+  default_page_size: 20
+  max_page_size: 100
+
+# Chat and embedding models live in settings/llm.yaml.
+# Uncomment a model there (openai / azure / anthropic / gemini) and restart.
+
+vectordb:
+  provider: qdrant
+  # One shared collection for every candidate resume (payload-filtered by user).
+  collection: resume_chunks
+  qdrant:
+    host: localhost
+    # Project default (not the Qdrant docker 6333). Change here if your
+    # local Qdrant listens elsewhere.
+    port: 6533
+    timeout: 120
+    dense_dim: 1536
+    https: false
+
+postgres:
+  host: localhost
+  port: 5432
+  user: postgres
+  db: AI_Interview_DB
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  echo: false
+
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+
+celery:
+  broker_url: redis://localhost:6379/1
+  result_backend: redis://localhost:6379/2
+
+auth:
+  jwt_algorithm: HS256
+  access_token_expire_minutes: 30
+  refresh_token_expire_days: 7
+  access_cookie_name: session
+  refresh_cookie_name: refresh_token
+
+storage:
+  backend: local
+  root: ./storage
+  max_upload_size_mb: 10
+
+voice:
+  stt_model: whisper-large-v3-turbo
+  tts_voice: af_heart
+  tts_speed: 1.0
+  max_audio_upload_mb: 25
+
+resume:
+  chunk_size_chars: 20000
+  chunk_overlap_chars: 500
+  ingestion_timeout_seconds: 600
+  snapshot_char_limit: 12000
+
+interview:
+  duration_min_minutes: 15
+  duration_max_minutes: 90
+  default_duration_minutes: 30
+  hard_question_cap: 20
+  jd_min_chars: 200
+  jd_max_chars: 20000
+  evaluation_lease_minutes: 5
+  # Assigned interviews: open this many minutes before scheduled_at,
+  # and close this many minutes after scheduled_at + duration.
+  access_open_minutes_before: 5
+  access_close_minutes_after_duration: 10
+  role_requirements_max_items: 20
+  role_requirement_max_chars: 300
+  role_skills_max_items: 30
+  role_skill_max_chars: 100
+  extra_question_every_minutes: 15
+  # Targets are ceilings — the clock closes the session early when answers
+  # run long. Category quotas per duration live in the planner's
+  # DURATION BUDGET (question_planner._budget_tier).
+  duration_question_counts:
+    - max_minutes: 15
+      questions: 8
+    - max_minutes: 30
+      questions: 14
+    - max_minutes: 45
+      questions: 15
+    - max_minutes: 60
+      questions: 15
+  duration_options:
+    - minutes: 15
+      label: 15 min
+    - minutes: 30
+      label: 30 min
+    - minutes: 45
+      label: 45 min
+    - minutes: 60
+      label: 60 min
+
+logging:
+  level: DEBUG
+  # null = stdout only. Set a path such as ./logs/app.log to also write a file.
+  file_path: null

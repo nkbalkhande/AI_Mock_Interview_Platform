@@ -132,7 +132,7 @@ function EmptyState() {
           here. You&apos;ll also receive a notification.
         </p>
         <Button asChild variant="outline" className="mt-2">
-          <Link href={ROUTES.candidate.interviews}>
+          <Link href={ROUTES.candidate.dashboard}>
             Try a Practice Interview
           </Link>
         </Button>

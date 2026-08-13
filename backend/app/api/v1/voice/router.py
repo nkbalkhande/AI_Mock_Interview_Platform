@@ -63,9 +63,11 @@ async def speech_to_text(
     if not data:
         raise ValidationError("The audio file is empty.")
 
-    max_bytes = 25 * 1024 * 1024
+    max_bytes = settings.voice.max_audio_upload_mb * 1024 * 1024
     if len(data) > max_bytes:
-        raise ValidationError("Audio file exceeds the 25MB limit.")
+        raise ValidationError(
+            f"Audio file exceeds the {settings.voice.max_audio_upload_mb}MB limit."
+        )
 
     content_type = (audio.content_type or "").lower().split(";")[0].strip()
     if content_type not in _STT_AUDIO_TYPES:

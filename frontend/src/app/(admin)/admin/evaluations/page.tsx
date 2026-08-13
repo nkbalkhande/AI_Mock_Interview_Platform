@@ -29,20 +29,31 @@ function verdictVariant(
     NOT_CLEARED: "destructive",
     BORDERLINE: "secondary",
     NEEDS_REVIEW: "secondary",
+    NEEDS_FURTHER_REVIEW: "secondary",
   };
   return map[verdict] ?? "outline";
 }
 
+type ReviewTab = "pending" | "completed";
+
 export default function EvaluationsPage() {
   const [page, setPage] = useState(1);
+  const [tab, setTab] = useState<ReviewTab>("pending");
   const pageSize = 20;
 
   const { data, isLoading } = useEvaluations({
     page,
     page_size: pageSize,
+    review_state: tab,
   });
 
   const totalPages = data ? Math.ceil(data.total / data.page_size) : 0;
+  const isCompleted = tab === "completed";
+
+  function switchTab(next: ReviewTab) {
+    setTab(next);
+    setPage(1);
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -57,7 +68,29 @@ export default function EvaluationsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Pending Review</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">
+              {isCompleted ? "Completed Reviews" : "Pending Review"}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={tab === "pending" ? "default" : "outline"}
+                onClick={() => switchTab("pending")}
+              >
+                Pending
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={tab === "completed" ? "default" : "outline"}
+                onClick={() => switchTab("completed")}
+              >
+                Completed
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -68,7 +101,9 @@ export default function EvaluationsPage() {
             </div>
           ) : !data || data.items.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              No evaluations pending review.
+              {isCompleted
+                ? "No completed evaluations yet."
+                : "No evaluations pending review."}
             </p>
           ) : (
             <>
@@ -80,6 +115,9 @@ export default function EvaluationsPage() {
                       <TableHead>Role</TableHead>
                       <TableHead>AI Score</TableHead>
                       <TableHead>AI Verdict</TableHead>
+                      {isCompleted ? (
+                        <TableHead>Admin Decision</TableHead>
+                      ) : null}
                       <TableHead>Submitted</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -109,11 +147,21 @@ export default function EvaluationsPage() {
                             {ev.ai_verdict?.replace(/_/g, " ") ?? "—"}
                           </Badge>
                         </TableCell>
+                        {isCompleted ? (
+                          <TableCell>
+                            <Badge
+                              variant={verdictVariant(ev.admin_decision)}
+                              className="text-xs"
+                            >
+                              {ev.admin_decision?.replace(/_/g, " ") ?? "—"}
+                            </Badge>
+                          </TableCell>
+                        ) : null}
                         <TableCell className="text-muted-foreground">
                           {formatDateTime(ev.submitted_at)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" asChild>
+                          <Button variant="ghost" size="icon" asChild title="View">
                             <Link
                               href={`${ROUTES.admin.evaluations}/${ev.session_id}`}
                             >

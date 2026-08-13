@@ -87,7 +87,7 @@ function PracticeResultsTab() {
         message="Complete a practice interview to see your results here."
         cta={
           <Button asChild variant="outline">
-            <Link href={ROUTES.candidate.interviews}>
+            <Link href={ROUTES.candidate.dashboard}>
               Start a Practice Interview
             </Link>
           </Button>

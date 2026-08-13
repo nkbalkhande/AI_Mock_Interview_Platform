@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 interface InterviewerVoiceProps {
   isTtsPlaying: boolean;
   hasError: boolean;
+  /** Browser blocked speech before the user's first interaction. */
+  isBlocked?: boolean;
   onReplay: () => void;
   onStop: () => void;
   disabled?: boolean;
@@ -21,6 +23,7 @@ interface InterviewerVoiceProps {
 export function InterviewerVoice({
   isTtsPlaying,
   hasError,
+  isBlocked,
   onReplay,
   onStop,
   disabled,
@@ -47,7 +50,13 @@ export function InterviewerVoice({
         )}
       </Button>
 
-      {hasError && !isTtsPlaying ? (
+      {isBlocked && !isTtsPlaying ? (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Volume2 className="h-4 w-4 shrink-0" />
+          Click Replay Question (or anywhere on the page) to hear it — the
+          browser blocks audio until your first interaction
+        </span>
+      ) : hasError && !isTtsPlaying ? (
         <span className="flex items-center gap-1.5 text-xs text-destructive">
           <VolumeOff className="h-4 w-4 shrink-0" />
           Voice is not working — please read the question above

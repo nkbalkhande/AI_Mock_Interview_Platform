@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { Eye, PlusCircle, Search, XCircle } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ClipboardCheck, Eye, PlusCircle, Search, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,7 +20,21 @@ import {
 } from "@/components/ui/table";
 import { useCancelInterview, useInterviews } from "@/features/admin/hooks";
 import { ROUTES } from "@/lib/constants";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatDuration, formatScore } from "@/lib/format";
+
+const QUICK_FILTERS = [
+  { label: "All", value: "" },
+  { label: "In Progress", value: "IN_PROGRESS_GROUP" },
+  { label: "Completed", value: "COMPLETED_GROUP" },
+  { label: "Cancelled", value: "CANCELLED_GROUP" },
+] as const;
+
+const NON_CANCELLABLE = new Set(["CANCELLED", "COMPLETED", "EXPIRED"]);
+const EVALUATION_STATUSES = new Set([
+  "AI_EVALUATED",
+  "ADMIN_REVIEW",
+  "COMPLETED",
+]);
 
 function statusVariant(
   status: string,
@@ -37,11 +52,36 @@ function statusVariant(
 }
 
 export default function InterviewsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      }
+    >
+      <InterviewsPageContent />
+    </Suspense>
+  );
+}
+
+function InterviewsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams.get("status") ?? "",
+  );
   const [typeFilter, setTypeFilter] = useState("");
   const pageSize = 20;
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("status") ?? "";
+    setStatusFilter(fromUrl);
+    setPage(1);
+  }, [searchParams]);
 
   const { data, isLoading } = useInterviews({
     page,
@@ -53,6 +93,21 @@ export default function InterviewsPage() {
 
   const cancel = useCancelInterview();
   const totalPages = data ? Math.ceil(data.total / data.page_size) : 0;
+
+  function applyStatusFilter(value: string) {
+    setStatusFilter(value);
+    setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set("status", value);
+    } else {
+      params.delete("status");
+    }
+    const qs = params.toString();
+    router.replace(
+      qs ? `${ROUTES.admin.interviews}?${qs}` : ROUTES.admin.interviews,
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -75,6 +130,19 @@ export default function InterviewsPage() {
 
       <Card>
         <CardHeader>
+          <div className="flex flex-wrap items-center gap-2 pb-3">
+            {QUICK_FILTERS.map((f) => (
+              <Button
+                key={f.label}
+                type="button"
+                size="sm"
+                variant={statusFilter === f.value ? "default" : "outline"}
+                onClick={() => applyStatusFilter(f.value)}
+              >
+                {f.label}
+              </Button>
+            ))}
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -89,11 +157,25 @@ export default function InterviewsPage() {
               />
             </div>
             <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
+              value={
+                [
+                  "",
+                  "DRAFT",
+                  "ASSIGNED",
+                  "SCHEDULED",
+                  "AVAILABLE",
+                  "IN_PROGRESS",
+                  "SUBMITTED",
+                  "AI_EVALUATED",
+                  "ADMIN_REVIEW",
+                  "COMPLETED",
+                  "CANCELLED",
+                  "EXPIRED",
+                ].includes(statusFilter)
+                  ? statusFilter
+                  : ""
+              }
+              onChange={(e) => applyStatusFilter(e.target.value)}
               className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
               <option value="">All Statuses</option>
@@ -107,6 +189,7 @@ export default function InterviewsPage() {
               <option value="ADMIN_REVIEW">Admin Review</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>
+              <option value="EXPIRED">Expired</option>
             </select>
             <select
               value={typeFilter}
@@ -144,68 +227,113 @@ export default function InterviewsPage() {
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Scheduled</TableHead>
+                      <TableHead>Started</TableHead>
+                      <TableHead>Completed</TableHead>
+                      <TableHead>Duration</TableHead>
+                      <TableHead>Score</TableHead>
                       <TableHead>Assigned By</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.items.map((iv) => (
-                      <TableRow key={iv.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{iv.candidate_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {iv.candidate_email}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {iv.interview_type}
-                            {iv.practice_type
-                              ? ` / ${iv.practice_type.replace("_", " ")}`
-                              : ""}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{iv.role ?? "—"}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={statusVariant(iv.status)}
-                            className="text-xs"
-                          >
-                            {iv.status.replace(/_/g, " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDateTime(iv.scheduled_at)}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {iv.assigned_by_name ?? "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" asChild>
-                              <Link
-                                href={`${ROUTES.admin.interviews}/${iv.id}`}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                            {iv.status !== "CANCELLED" &&
-                            iv.status !== "COMPLETED" ? (
+                    {data.items.map((iv) => {
+                      const badgeLabel = (
+                        iv.display_status ?? iv.status
+                      ).replace(/_/g, " ");
+                      const canCancel = !NON_CANCELLABLE.has(iv.status);
+                      const canReview =
+                        !!iv.session_id &&
+                        EVALUATION_STATUSES.has(iv.status);
+
+                      return (
+                        <TableRow key={iv.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{iv.candidate_name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {iv.candidate_email}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {iv.interview_type}
+                              {iv.practice_type
+                                ? ` / ${iv.practice_type.replace("_", " ")}`
+                                : ""}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{iv.role ?? "—"}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={statusVariant(iv.status)}
+                              className="text-xs"
+                            >
+                              {badgeLabel}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDateTime(iv.scheduled_at)}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDateTime(iv.started_at)}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDateTime(iv.completed_at)}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDuration(iv.duration_minutes)}
+                          </TableCell>
+                          <TableCell className="font-mono text-muted-foreground">
+                            {formatScore(iv.overall_score)}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {iv.assigned_by_name ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => cancel.mutate(iv.id)}
-                                disabled={cancel.isPending}
+                                asChild
+                                title="View Interview"
                               >
-                                <XCircle className="h-4 w-4 text-destructive" />
+                                <Link
+                                  href={`${ROUTES.admin.interviews}/${iv.id}`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Link>
                               </Button>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                              {canReview ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  asChild
+                                  title="Review Evaluation"
+                                >
+                                  <Link
+                                    href={`${ROUTES.admin.evaluations}/${iv.session_id}`}
+                                  >
+                                    <ClipboardCheck className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                              ) : null}
+                              {canCancel ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Cancel Interview"
+                                  onClick={() => cancel.mutate(iv.id)}
+                                  disabled={cancel.isPending}
+                                >
+                                  <XCircle className="h-4 w-4 text-destructive" />
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

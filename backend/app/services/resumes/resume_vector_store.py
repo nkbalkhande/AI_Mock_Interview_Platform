@@ -2,7 +2,7 @@
 
 Design (answers "1000+ users -> 1 collection-per-user is bad"):
 
-- **One shared collection** (``settings.QDRANT_RESUME_COLLECTION``) holds
+- **One shared collection** (``settings.vectordb.collection``) holds
   every chunk from every candidate's resume. Qdrant collections are meant
   to scale to millions of points; a collection per user would multiply
   fixed per-collection overhead (HNSW index, segments, payload indexes) by
@@ -46,17 +46,17 @@ def _point_id(resume_version_id: uuid.UUID, chunk_index: int) -> str:
 @lru_cache
 def get_qdrant_client() -> QdrantClient:
     return QdrantClient(
-        host=settings.QDRANT_HOST,
-        port=settings.QDRANT_PORT,
+        host=settings.vectordb.qdrant.host,
+        port=settings.vectordb.qdrant.port,
         api_key=settings.QDRANT_API_KEY,
-        https=False,
+        https=settings.vectordb.qdrant.https,
     )
 
 
 class ResumeVectorStore:
     def __init__(self, client: QdrantClient | None = None) -> None:
         self._client = client or get_qdrant_client()
-        self._collection = settings.QDRANT_RESUME_COLLECTION
+        self._collection = settings.vectordb.collection
 
     def ensure_collection(self) -> None:
         """Create the shared collection + payload indexes if missing (idempotent)."""
@@ -64,7 +64,7 @@ class ResumeVectorStore:
             self._client.create_collection(
                 collection_name=self._collection,
                 vectors_config=qmodels.VectorParams(
-                    size=settings.EMBEDDING_DIMENSIONS,
+                    size=settings.embedding.dimensions,
                     distance=qmodels.Distance.COSINE,
                 ),
             )

@@ -45,9 +45,11 @@ export async function getUsers(params: {
 
 export async function getUserDetail(
   userId: string,
+  params?: { page?: number; page_size?: number },
 ): Promise<UserDetailResponse> {
   const { data } = await apiClient.get<UserDetailResponse>(
     `/admin/users/${userId}`,
+    { params },
   );
   return data;
 }
@@ -116,6 +118,7 @@ export async function cancelInterview(
 export async function getEvaluations(params: {
   page?: number;
   page_size?: number;
+  review_state?: string;
 }): Promise<EvaluationListResponse> {
   const { data } = await apiClient.get<EvaluationListResponse>(
     "/admin/evaluations",

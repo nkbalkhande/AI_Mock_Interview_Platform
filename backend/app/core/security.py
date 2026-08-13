@@ -69,7 +69,7 @@ def create_access_token(
     """
     expire_at = _now() + (
         expires_delta
-        or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        or timedelta(minutes=settings.auth.access_token_expire_minutes)
     )
     payload: dict[str, Any] = {
         "sub": subject,
@@ -80,7 +80,7 @@ def create_access_token(
     if extra_claims:
         payload.update(extra_claims)
     token = jwt.encode(
-        payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
+        payload, settings.JWT_SECRET_KEY, algorithm=settings.auth.jwt_algorithm
     )
     return token, expire_at
 
@@ -88,7 +88,7 @@ def create_access_token(
 def decode_token(token: str) -> dict[str, Any]:
     """Decode and verify a JWT. Raises ``jwt.PyJWTError`` on any problem."""
     return jwt.decode(
-        token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+        token, settings.JWT_SECRET_KEY, algorithms=[settings.auth.jwt_algorithm]
     )
 
 

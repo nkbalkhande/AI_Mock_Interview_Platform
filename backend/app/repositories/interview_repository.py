@@ -223,12 +223,29 @@ class InterviewRepository(BaseRepository[Interview]):
     # ------------------------------------------------------------------
 
     async def admin_count_all(self) -> int:
-        stmt = select(func.count(Interview.id))
+        stmt = select(func.count(Interview.id)).where(
+            Interview.status.not_in(("DRAFT",))
+        )
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def admin_count_completed(self) -> int:
         stmt = select(func.count(Interview.id)).where(
             Interview.status.in_(_COMPLETED_STATUSES)
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def admin_count_by_statuses(self, statuses: Sequence[str]) -> int:
+        stmt = select(func.count(Interview.id)).where(
+            Interview.status.in_(tuple(statuses))
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def admin_count_scheduled_upcoming(self) -> int:
+        now = func.now()
+        stmt = select(func.count(Interview.id)).where(
+            Interview.status.in_(("ASSIGNED", "SCHEDULED", "AVAILABLE")),
+            Interview.scheduled_at.is_not(None),
+            Interview.scheduled_at > now,
         )
         return int((await self.session.execute(stmt)).scalar_one())
 
@@ -239,7 +256,9 @@ class InterviewRepository(BaseRepository[Interview]):
         interview_type: str | None = None,
         search: str | None = None,
     ) -> int:
-        stmt = select(func.count(Interview.id)).select_from(Interview)
+        stmt = select(func.count(Interview.id)).select_from(Interview).where(
+            Interview.status.not_in(("DRAFT",))
+        )
         stmt = self._admin_apply_filters(
             stmt, status=status, interview_type=interview_type, search=search
         )
@@ -257,6 +276,7 @@ class InterviewRepository(BaseRepository[Interview]):
         offset = (page - 1) * page_size
         stmt = (
             select(Interview)
+            .where(Interview.status.not_in(("DRAFT",)))
             .options(
                 selectinload(Interview.candidate),
                 selectinload(Interview.assigned_by_user),
@@ -277,31 +297,69 @@ class InterviewRepository(BaseRepository[Interview]):
                 selectinload(Interview.candidate),
                 selectinload(Interview.assigned_by_user),
                 selectinload(Interview.resume_version),
+                selectinload(Interview.events),
             )
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def admin_count_for_user(self, user_id: uuid.UUID) -> int:
         stmt = select(func.count(Interview.id)).where(
-            Interview.candidate_id == user_id
+            Interview.candidate_id == user_id,
+            Interview.status.not_in(("DRAFT",)),
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def admin_count_for_user_by_type(
+        self, user_id: uuid.UUID, *, interview_type: str
+    ) -> int:
+        stmt = select(func.count(Interview.id)).where(
+            Interview.candidate_id == user_id,
+            Interview.interview_type == interview_type,
+            Interview.status.not_in(("DRAFT",)),
+        )
+        return int((await self.session.execute(stmt)).scalar_one())
+
+    async def admin_count_for_user_completed(self, user_id: uuid.UUID) -> int:
+        stmt = select(func.count(Interview.id)).where(
+            Interview.candidate_id == user_id,
+            Interview.status.in_(_COMPLETED_STATUSES),
         )
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def admin_list_for_user(
-        self, user_id: uuid.UUID, *, limit: int = 20
+        self,
+        user_id: uuid.UUID,
+        *,
+        page: int = 1,
+        page_size: int = 20,
     ) -> Sequence[Interview]:
+        offset = (page - 1) * page_size
         stmt = (
             select(Interview)
-            .where(Interview.candidate_id == user_id)
+            .where(
+                Interview.candidate_id == user_id,
+                Interview.status.not_in(("DRAFT",)),
+            )
             .order_by(Interview.created_at.desc())
-            .limit(limit)
+            .offset(offset)
+            .limit(page_size)
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
     def _admin_apply_filters(self, stmt, *, status, interview_type, search):  # noqa: ANN001, ANN202
         if status:
-            stmt = stmt.where(Interview.status == status)
+            # Support grouped quick-filters from the admin UI.
+            if status == "IN_PROGRESS_GROUP":
+                stmt = stmt.where(
+                    Interview.status.in_(("IN_PROGRESS", "AVAILABLE"))
+                )
+            elif status == "COMPLETED_GROUP":
+                stmt = stmt.where(Interview.status.in_(_COMPLETED_STATUSES))
+            elif status == "CANCELLED_GROUP":
+                stmt = stmt.where(Interview.status.in_(("CANCELLED", "EXPIRED")))
+            else:
+                stmt = stmt.where(Interview.status == status)
         if interview_type:
             stmt = stmt.where(Interview.interview_type == interview_type)
         if search:

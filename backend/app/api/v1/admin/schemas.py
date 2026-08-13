@@ -23,6 +23,10 @@ class AdminDashboardStats(BaseModel):
     total_interviews: int = Field(ge=0)
     pending_evaluations: int = Field(ge=0)
     completed_interviews: int = Field(ge=0)
+    in_progress_interviews: int = Field(ge=0, default=0)
+    scheduled_upcoming: int = Field(ge=0, default=0)
+    cancelled_or_expired: int = Field(ge=0, default=0)
+    average_ai_score: Decimal | None = None
 
 
 class RecentActivityItem(BaseModel):
@@ -31,6 +35,8 @@ class RecentActivityItem(BaseModel):
     description: str
     actor_name: str | None = None
     created_at: datetime
+    interview_id: uuid.UUID | None = None
+    session_id: uuid.UUID | None = None
 
 
 class AdminDashboardResponse(BaseModel):
@@ -90,7 +96,15 @@ class UserDetailResponse(BaseModel):
     created_at: datetime
     last_login_at: datetime | None = None
     total_interviews: int = 0
+    practice_count: int = 0
+    assigned_count: int = 0
+    completed_count: int = 0
+    resume_file_name: str | None = None
+    resume_file_path: str | None = None
     interviews: list[UserInterviewSummary] = Field(default_factory=list)
+    interviews_total: int = 0
+    interviews_page: int = 1
+    interviews_page_size: int = 20
 
 
 class UpdateUserStatusRequest(BaseModel):
@@ -115,10 +129,18 @@ class InterviewListItem(BaseModel):
     practice_type: str | None = None
     role: str | None = None
     status: str
+    display_status: str | None = None
     scheduled_at: datetime | None = None
     duration_minutes: int
     assigned_by_name: str | None = None
     created_at: datetime
+    session_id: uuid.UUID | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    overall_score: Decimal | None = None
+    admin_decision: str | None = None
+    answered_count: int = 0
+    total_questions: int = 0
 
 
 class InterviewListResponse(BaseModel):
@@ -126,6 +148,24 @@ class InterviewListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class InterviewDetailQuestion(BaseModel):
+    question_number: int
+    question_text: str
+    question_type: str
+    difficulty: str | None = None
+    candidate_answer: str | None = None
+    overall_score: Decimal | None = None
+    feedback: str | None = None
+
+
+class InterviewDetailEvent(BaseModel):
+    id: uuid.UUID
+    event_type: str
+    description: str
+    actor_name: str | None = None
+    created_at: datetime
 
 
 class InterviewDetailResponse(BaseModel):
@@ -141,6 +181,7 @@ class InterviewDetailResponse(BaseModel):
     required_experience_min: Decimal | None = None
     required_experience_max: Decimal | None = None
     status: str
+    display_status: str | None = None
     scheduled_at: datetime | None = None
     timezone: str | None = None
     duration_minutes: int
@@ -150,6 +191,24 @@ class InterviewDetailResponse(BaseModel):
     assigned_by_name: str | None = None
     created_at: datetime
     updated_at: datetime
+    session_id: uuid.UUID | None = None
+    session_status: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    overall_score: Decimal | None = None
+    technical_score: Decimal | None = None
+    communication_score: Decimal | None = None
+    reasoning_score: Decimal | None = None
+    ai_verdict: str | None = None
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    admin_decision: str | None = None
+    answered_count: int = 0
+    total_questions: int = 0
+    questions: list[InterviewDetailQuestion] = Field(default_factory=list)
+    resume_file_name: str | None = None
+    resume_file_path: str | None = None
+    events: list[InterviewDetailEvent] = Field(default_factory=list)
 
 
 class AssignInterviewRequest(BaseModel):
@@ -191,6 +250,7 @@ class EvaluationListItem(BaseModel):
     interview_type: str
     ai_overall_score: Decimal | None = None
     ai_verdict: str | None = None
+    admin_decision: str | None = None
     status: str
     submitted_at: datetime | None = None
 
@@ -217,6 +277,13 @@ class QuestionEvaluationDetail(BaseModel):
     feedback: str | None = None
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
+
+
+class SkillScoreItem(BaseModel):
+    skill_name: str
+    score: Decimal | None = None
+    max_score: Decimal | None = None
+    evidence: list[str] = Field(default_factory=list)
 
 
 class EvaluationDetailResponse(BaseModel):
@@ -247,6 +314,7 @@ class EvaluationDetailResponse(BaseModel):
 
     # Per-question breakdown
     questions: list[QuestionEvaluationDetail] = Field(default_factory=list)
+    skill_scores: list[SkillScoreItem] = Field(default_factory=list)
 
     session_status: str
     session_started_at: datetime | None = None

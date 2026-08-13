@@ -19,7 +19,6 @@ export const ROUTES = {
   resetPassword: "/reset-password",
   candidate: {
     dashboard: "/dashboard",
-    interviews: "/interviews",
     interviewsJdBased: "/interviews/jd-based",
     interviewsRoleBased: "/interviews/role-based",
     interviewHistory: "/interviews/history",

@@ -44,8 +44,8 @@ def _synthesize_sync(text: str) -> bytes:
     samples_list: list[np.ndarray] = []
     for _graphemes, _phonemes, audio in pipeline(
         text,
-        voice=settings.TTS_VOICE,
-        speed=settings.TTS_SPEED,
+        voice=settings.voice.tts_voice,
+        speed=settings.voice.tts_speed,
     ):
         if audio is not None:
             samples_list.append(audio)

@@ -1,8 +1,15 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Mail, Phone, Building2, Briefcase } from "lucide-react";
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  Building2,
+  Briefcase,
+  FileText,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useUpdateUserStatus, useUserDetail } from "@/features/admin/hooks";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, storageFileUrl } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/format";
 
 function statusVariant(status: string) {
@@ -25,6 +32,7 @@ function statusVariant(status: string) {
     COMPLETED: "default",
     IN_PROGRESS: "secondary",
     CANCELLED: "destructive",
+    EXPIRED: "destructive",
     ASSIGNED: "outline",
     SCHEDULED: "outline",
     AVAILABLE: "secondary",
@@ -38,7 +46,12 @@ export default function UserDetailPage({
   params: Promise<{ userId: string }>;
 }) {
   const { userId } = use(params);
-  const { data: user, isLoading } = useUserDetail(userId);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const { data: user, isLoading } = useUserDetail(userId, {
+    page,
+    page_size: pageSize,
+  });
   const updateStatus = useUpdateUserStatus();
 
   if (isLoading) {
@@ -61,20 +74,49 @@ export default function UserDetailPage({
     );
   }
 
+  const resumeUrl = storageFileUrl(user.resume_file_path);
+  const interviewsTotal = user.interviews_total ?? user.total_interviews;
+  const totalPages = Math.ceil(interviewsTotal / pageSize) || 0;
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href={ROUTES.admin.users}>
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {user.full_name}
-          </h1>
-          <p className="text-sm text-muted-foreground">{user.email}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href={ROUTES.admin.users}>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {user.full_name}
+            </h1>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
+          </div>
         </div>
+        {resumeUrl ? (
+          <Button variant="outline" size="sm" asChild>
+            <a href={resumeUrl} target="_blank" rel="noopener noreferrer">
+              <FileText className="mr-2 h-4 w-4" />
+              View Resume
+            </a>
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="secondary">
+          Practice: {user.practice_count}
+        </Badge>
+        <Badge variant="secondary">
+          Assigned: {user.assigned_count}
+        </Badge>
+        <Badge variant="secondary">
+          Completed: {user.completed_count}
+        </Badge>
+        <Badge variant="outline">
+          Total: {user.total_interviews}
+        </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -168,7 +210,7 @@ export default function UserDetailPage({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Interview History ({user.total_interviews})
+            Interview History ({interviewsTotal})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -177,45 +219,88 @@ export default function UserDetailPage({
               No interviews yet.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Scheduled</TableHead>
-                    <TableHead>Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {user.interviews.map((iv) => (
-                    <TableRow key={iv.interview_id}>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {iv.interview_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{iv.role ?? "—"}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={statusVariant(iv.status)}
-                          className="text-xs"
-                        >
-                          {iv.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDateTime(iv.scheduled_at)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(iv.created_at)}
-                      </TableCell>
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Scheduled</TableHead>
+                      <TableHead>Created</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {user.interviews.map((iv) => (
+                      <TableRow key={iv.interview_id}>
+                        <TableCell>
+                          <Link
+                            href={`${ROUTES.admin.interviews}/${iv.interview_id}`}
+                            className="hover:underline"
+                          >
+                            <Badge variant="outline" className="text-xs">
+                              {iv.interview_type}
+                            </Badge>
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`${ROUTES.admin.interviews}/${iv.interview_id}`}
+                            className="text-sm font-medium hover:underline"
+                          >
+                            {iv.role ?? "—"}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={statusVariant(iv.status)}
+                            className="text-xs"
+                          >
+                            {iv.status.replace(/_/g, " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDateTime(iv.scheduled_at)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDate(iv.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {totalPages > 1 ? (
+                <div className="mt-4 flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Showing {user.interviews.length} of {interviewsTotal}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {page} / {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </>
           )}
         </CardContent>
       </Card>

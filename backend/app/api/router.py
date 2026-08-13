@@ -1,7 +1,7 @@
 """Top-level API router.
 
 Aggregates all versioned domain routers under a single ``api_router`` that
-``main.py`` mounts at ``settings.API_V1_PREFIX``. Domain routers are wired in
+``main.py`` mounts at ``settings.app.api_v1_prefix``. Domain routers are wired in
 as each phase is implemented (auth, users, resumes, interviews, ...).
 """
 
@@ -13,6 +13,7 @@ from app.api.v1.admin.router import router as admin_router
 from app.api.v1.auth.router import router as auth_router
 from app.api.v1.candidate.interview_router import router as candidate_interview_router
 from app.api.v1.candidate.router import router as candidate_router
+from app.api.v1.config.router import router as config_router
 from app.api.v1.files.router import router as files_router
 from app.api.v1.notifications.router import router as notifications_router
 from app.api.v1.voice.router import router as voice_router
@@ -26,6 +27,7 @@ async def ping() -> dict[str, str]:
 
 
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+api_router.include_router(config_router, prefix="/config", tags=["config"])
 api_router.include_router(
     candidate_router, prefix="/candidate", tags=["candidate"]
 )

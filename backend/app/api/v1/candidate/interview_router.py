@@ -73,7 +73,7 @@ def _build_lifecycle_service(db: AsyncSession) -> InterviewLifecycleService:
         db,
         planner=planner,
         evaluator=evaluator,
-        model_name=settings.OPENAI_MODEL,
+        model_name=settings.llm.model,
     )
 
 

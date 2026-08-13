@@ -25,37 +25,37 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging()
-    logger.info("Starting %s (env=%s)", settings.APP_NAME, settings.APP_ENV)
+    logger.info("Starting %s (env=%s)", settings.app.name, settings.app.env)
     try:
         ResumeVectorStore().ensure_collection()
     except Exception:  # noqa: BLE001 - Qdrant being down must not block boot
         logger.exception("Could not ensure Qdrant resume collection on startup")
     yield
-    logger.info("Shutting down %s", settings.APP_NAME)
+    logger.info("Shutting down %s", settings.app.name)
     await dispose_engine()
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title=settings.APP_NAME,
-        debug=settings.DEBUG,
+        title=settings.app.name,
+        debug=settings.app.debug,
         lifespan=lifespan,
     )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.BACKEND_CORS_ORIGINS,
+        allow_origins=settings.app.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     register_exception_handlers(app)
-    app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(api_router, prefix=settings.app.api_v1_prefix)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
-        return {"status": "healthy", "app": settings.APP_NAME}
+        return {"status": "healthy", "app": settings.app.name}
 
     return app
 

@@ -46,7 +46,7 @@ class TokenService:
 
         refresh_token = generate_refresh_token()
         refresh_expires_at = datetime.now(timezone.utc) + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+            days=settings.auth.refresh_token_expire_days
         )
 
         self.session.add(

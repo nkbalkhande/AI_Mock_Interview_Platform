@@ -37,6 +37,7 @@ class InterviewStatus(StrEnum):
     ADMIN_REVIEW = "ADMIN_REVIEW"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
 
 
 class SessionStatus(StrEnum):

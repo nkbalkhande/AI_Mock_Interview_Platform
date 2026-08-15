@@ -94,6 +94,8 @@ def _session(
         resume_version_id=uuid.uuid4(),
         duration_minutes=30,
         status="IN_PROGRESS",
+        required_experience_min=None,
+        required_experience_max=None,
     )
     return SimpleNamespace(
         id=uuid.uuid4(),

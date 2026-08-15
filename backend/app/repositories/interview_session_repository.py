@@ -87,6 +87,36 @@ class InterviewSessionRepository(BaseRepository[InterviewSession]):
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def get_owned_with_result(
+        self,
+        session_id: uuid.UUID,
+        candidate_id: uuid.UUID,
+    ) -> InterviewSession | None:
+        """Ownership-scoped load for the assigned result view.
+
+        Eager-loads the parent interview (with the assigning admin) and the
+        final decision (with the deciding admin) — everything the candidate
+        result page needs in one round-trip. Returns ``None`` for missing or
+        foreign sessions so callers can answer with a uniform 404.
+        """
+        stmt = (
+            select(InterviewSession)
+            .join(Interview, InterviewSession.interview_id == Interview.id)
+            .where(
+                InterviewSession.id == session_id,
+                Interview.candidate_id == candidate_id,
+            )
+            .options(
+                selectinload(InterviewSession.interview).selectinload(
+                    Interview.assigned_by_user
+                ),
+                selectinload(InterviewSession.final_decision).selectinload(
+                    FinalDecision.decided_by_user
+                ),
+            )
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     async def average_practice_final_score(
         self, candidate_id: uuid.UUID
     ) -> Decimal | None:

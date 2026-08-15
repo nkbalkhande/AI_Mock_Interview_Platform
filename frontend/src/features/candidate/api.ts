@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client";
 
 import type {
+  AssignedResultDetail,
   AssignedResultListResponse,
   CandidateProfileResponse,
   CandidateProfileUpdateRequest,
@@ -72,6 +73,16 @@ export async function getAssignedResults(
   const { data } = await apiClient.get<AssignedResultListResponse>(
     "/candidate/results/assigned",
     { params: { page, page_size: pageSize } },
+  );
+  return data;
+}
+
+/** GET /candidate/results/assigned/:sessionId — single assigned result. */
+export async function getAssignedResultDetail(
+  sessionId: string,
+): Promise<AssignedResultDetail> {
+  const { data } = await apiClient.get<AssignedResultDetail>(
+    `/candidate/results/assigned/${sessionId}`,
   );
   return data;
 }

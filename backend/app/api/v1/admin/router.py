@@ -22,6 +22,8 @@ from app.api.v1.admin.schemas import (
     EvaluationListResponse,
     InterviewDetailResponse,
     InterviewListResponse,
+    RescheduleInterviewRequest,
+    RescheduleInterviewResponse,
     JobRoleItem,
     SubmitDecisionRequest,
     SubmitDecisionResponse,
@@ -182,6 +184,20 @@ async def cancel_interview(
     if result is None:
         raise HTTPException(status_code=404, detail="Interview not found.")
     return result
+
+
+@router.patch(
+    "/interviews/{interview_id}/reschedule",
+    response_model=RescheduleInterviewResponse,
+)
+async def reschedule_interview(
+    interview_id: uuid.UUID,
+    request: RescheduleInterviewRequest,
+    current_user: User = Depends(require_roles(RoleName.ADMIN)),
+    service: AdminService = Depends(get_admin_service),
+) -> RescheduleInterviewResponse:
+    """Reschedule a missed assigned interview and optionally notify the candidate."""
+    return await service.reschedule_interview(interview_id, request, current_user)
 
 
 # ------------------------------------------------------------------

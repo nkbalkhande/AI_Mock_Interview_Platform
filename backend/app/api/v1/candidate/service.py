@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.candidate.schemas import (
+    AssignedResultDetail,
     AssignedResultListItem,
     AssignedResultListResponse,
     AssignedResultSummary,
@@ -70,7 +71,14 @@ class CandidateDashboardService:
         self.interviews = InterviewRepository(session)
         self.sessions = InterviewSessionRepository(session)
 
+    async def _expire_missed_assigned(self) -> None:
+        """Persist no-show interviews so upcoming lists and history stay accurate."""
+        expired = await self.interviews.expire_overdue_assigned()
+        if expired:
+            await self.session.commit()
+
     async def get_dashboard(self, candidate: User) -> DashboardResponse:
+        await self._expire_missed_assigned()
         practice_count = await self.interviews.count_by_type(
             candidate.id, interview_type="PRACTICE"
         )
@@ -108,6 +116,7 @@ class CandidateDashboardService:
     async def get_upcoming_interviews(
         self, candidate: User, *, limit: int = 20
     ) -> UpcomingInterviewsResponse:
+        await self._expire_missed_assigned()
         rows = await self.interviews.list_upcoming(candidate.id, limit=limit)
         items = [self._to_upcoming(row) for row in rows]
         return UpcomingInterviewsResponse(items=items)
@@ -170,6 +179,7 @@ class CandidateDashboardService:
         self, candidate: User, interview_id: uuid.UUID
     ) -> UpcomingInterviewDetail | None:
         """Fetch full details for one assigned interview owned by this candidate."""
+        await self._expire_missed_assigned()
         interview = await self.interviews.get_owned_by_candidate(
             interview_id, candidate.id
         )
@@ -243,6 +253,64 @@ class CandidateDashboardService:
             items=items, total=total, page=page, page_size=page_size
         )
 
+    async def get_assigned_result_detail(
+        self, candidate: User, session_id: uuid.UUID
+    ) -> AssignedResultDetail | None:
+        """Result view for one assigned session owned by this candidate.
+
+        Until the admin submits a final decision the response is a
+        ``PENDING_REVIEW`` shell: AI scores/verdict are withheld so the AI
+        recommendation never reaches the candidate before the admin's call.
+        """
+        session = await self.sessions.get_owned_with_result(
+            session_id, candidate.id
+        )
+        if session is None or session.interview.interview_type != "ASSIGNED":
+            return None
+
+        interview = session.interview
+        decision = session.final_decision
+        published = decision is not None and decision.admin_decision is not None
+
+        return AssignedResultDetail(
+            interview_id=interview.id,
+            session_id=session.id,
+            role=interview.role_name_snapshot,
+            duration_minutes=interview.duration_minutes,
+            scheduled_at=interview.scheduled_at,
+            completed_at=session.ended_at,
+            assigned_by_name=(
+                interview.assigned_by_user.full_name
+                if interview.assigned_by_user
+                else None
+            ),
+            status="PUBLISHED" if published else "PENDING_REVIEW",
+            ai_overall_score=decision.ai_overall_score if published else None,
+            ai_verdict=decision.ai_verdict if published else None,
+            ai_summary=decision.ai_summary if published else None,
+            strengths=(
+                _coerce_str_list(decision.ai_strengths) if published else []
+            ),
+            weaknesses=(
+                _coerce_str_list(decision.ai_weaknesses) if published else []
+            ),
+            improvement_areas=(
+                _coerce_str_list(decision.ai_improvement_areas)
+                if published
+                else []
+            ),
+            admin_decision=decision.admin_decision if published else None,
+            admin_feedback=decision.admin_feedback if published else None,
+            decided_by_name=(
+                decision.decided_by_user.full_name
+                if published and decision.decided_by_user
+                else None
+            ),
+            result_published_at=(
+                decision.result_published_at if published else None
+            ),
+        )
+
     async def get_interview_history(
         self,
         candidate: User,
@@ -253,6 +321,7 @@ class CandidateDashboardService:
         type_filter: str | None = None,
     ) -> InterviewHistoryResponse:
         """Full interview history — every interview the candidate started or was assigned."""
+        await self._expire_missed_assigned()
         total = await self.interviews.count_history(
             candidate.id,
             status_filter=status_filter,
@@ -347,7 +416,9 @@ class CandidateDashboardService:
         if interview_status in ("CANCELLED",):
             return "Cancelled"
         if interview_status in ("EXPIRED",):
-            return "Expired"
+            return "Missed"
+        if interview_status == "RESCHEDULED":
+            return "Rescheduled"
         if interview_status in ("SUBMITTED", "AI_EVALUATED", "ADMIN_REVIEW"):
             return "Evaluating"
         if interview_status == "IN_PROGRESS":

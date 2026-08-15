@@ -94,12 +94,15 @@ class InterviewEvaluator:
         candidate_designation: str | None,
         candidate_experience: str | None,
         transcript: list[TranscriptEntry],
+        required_experience: str | None = None,
     ) -> EvaluationResult:
         """Evaluate a JD-based practice interview."""
         transcript_block = self._format_transcript(transcript)
         system_text, user_text = JD_EVALUATOR_PROMPT.render(
             candidate_designation=candidate_designation or "(unspecified)",
             candidate_experience=candidate_experience or "(unspecified)",
+            required_experience=required_experience
+            or "(not specified — use the experience stated in the JD, else the candidate's experience)",
             resume_text=_truncate(
                 resume_text or "(no resume text available)",
                 _RESUME_CONTEXT_CHAR_LIMIT,
@@ -124,12 +127,15 @@ class InterviewEvaluator:
         candidate_designation: str | None,
         candidate_experience: str | None,
         transcript: list[TranscriptEntry],
+        required_experience: str | None = None,
     ) -> EvaluationResult:
         """Evaluate a role-based practice interview."""
         transcript_block = self._format_transcript(transcript)
         system_text, user_text = ROLE_EVALUATOR_PROMPT.render(
             candidate_designation=candidate_designation or "(unspecified)",
             candidate_experience=candidate_experience or "(unspecified)",
+            required_experience=required_experience
+            or "(not specified — use the experience stated in the role profile, else the candidate's experience)",
             resume_text=_truncate(
                 resume_text or "(no resume text available)",
                 _RESUME_CONTEXT_CHAR_LIMIT,

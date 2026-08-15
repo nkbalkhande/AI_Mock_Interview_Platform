@@ -12,6 +12,7 @@ import {
   getJobRoles,
   getPracticeResult,
   getSessionState,
+  startAssignedInterview,
   startJdPractice,
   startRolePractice,
   submitAnswer,
@@ -142,6 +143,12 @@ export function useStartRolePractice() {
         },
       );
     },
+  });
+}
+
+export function useStartAssignedInterview() {
+  return useMutation<StartPracticeInterviewResponse, ApiError, string>({
+    mutationFn: startAssignedInterview,
   });
 }
 

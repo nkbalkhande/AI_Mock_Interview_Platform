@@ -18,6 +18,7 @@ from app.api.dependencies.auth import require_roles
 from app.api.dependencies.database import get_db
 from app.api.dependencies.storage import get_storage_service
 from app.api.v1.candidate.schemas import (
+    AssignedResultDetail,
     AssignedResultListResponse,
     CandidateProfileResponse,
     CandidateProfileUpdateRequest,
@@ -211,3 +212,23 @@ async def get_assigned_results(
     return await service.get_assigned_results(
         current_user, page=page, page_size=page_size
     )
+
+
+@router.get(
+    "/results/assigned/{session_id}",
+    response_model=AssignedResultDetail,
+)
+async def get_assigned_result_detail(
+    session_id: uuid.UUID,
+    current_user: User = Depends(require_roles(RoleName.CANDIDATE)),
+    service: CandidateDashboardService = Depends(get_candidate_dashboard_service),
+) -> AssignedResultDetail:
+    """Result for a single assigned interview session.
+
+    Returns a ``PENDING_REVIEW`` shell (no AI scores/verdict) until the
+    admin publishes a final decision.
+    """
+    result = await service.get_assigned_result_detail(current_user, session_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Interview session not found.")
+    return result

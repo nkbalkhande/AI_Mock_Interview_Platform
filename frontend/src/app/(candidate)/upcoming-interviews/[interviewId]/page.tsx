@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Briefcase,
@@ -14,14 +14,16 @@ import {
 } from "lucide-react";
 
 import { InterviewStatusBadge } from "@/components/dashboard/interview-status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpcomingInterviewDetail } from "@/features/candidate/hooks";
+import type { UpcomingInterviewDetail } from "@/features/candidate/types";
+import { useStartAssignedInterview } from "@/features/interviews/hooks";
 import { formatDate, formatDuration, formatTime } from "@/lib/format";
 import { ROUTES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
 export default function UpcomingInterviewDetailPage() {
   const params = useParams<{ interviewId: string }>();
@@ -35,21 +37,37 @@ export default function UpcomingInterviewDetailPage() {
     return <DetailError onRetry={() => refetch()} />;
   }
 
+  return <InterviewDetailBody data={data} />;
+}
+
+function InterviewDetailBody({ data }: { data: UpcomingInterviewDetail }) {
   const isOpen = data.access_state === "OPEN";
   const isClosed = data.access_state === "CLOSED";
   const isPending = data.access_state === "PENDING";
+  const canJoin = isOpen || data.status === "IN_PROGRESS";
+  const start = useStartAssignedInterview();
+  const router = useRouter();
+
+  async function handleStart() {
+    try {
+      const result = await start.mutateAsync(data.id);
+      router.push(ROUTES.candidate.interview(result.session_id));
+    } catch {
+      // Error is rendered from start.error below.
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0">
           <Link href={ROUTES.candidate.upcoming}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">
+          <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
             {data.role ?? "Assigned Interview"}
           </h1>
         </div>
@@ -57,30 +75,36 @@ export default function UpcomingInterviewDetailPage() {
       </div>
 
       {/* Access Window Banner */}
-      {isOpen && (
-        <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+      {canJoin && (
+        <div className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30 sm:flex-row sm:items-center">
           <PlayCircle className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-              Interview window is open
+              {data.status === "IN_PROGRESS"
+                ? "Interview in progress"
+                : "Interview window is open"}
             </p>
             <p className="text-xs text-emerald-700 dark:text-emerald-300">
-              You can start this interview now.
-              {data.access_end_at && (
+              {data.status === "IN_PROGRESS"
+                ? "You can continue this interview now."
+                : "You can start this interview now."}
+              {data.access_end_at && data.status !== "IN_PROGRESS" && (
                 <> Window closes at {formatTime(data.access_end_at)}.</>
               )}
             </p>
           </div>
-          <Button asChild size="sm">
-            <Link href={ROUTES.candidate.interview(data.id)}>
-              <PlayCircle className="mr-1 h-3.5 w-3.5" />
-              Join Interview
-            </Link>
-          </Button>
+          <StartAssignedButton
+            interview={data}
+            size="sm"
+            isPending={start.isPending}
+            errorMessage={start.error?.message}
+            onStart={handleStart}
+            className="w-full sm:w-auto"
+          />
         </div>
       )}
 
-      {isPending && (
+      {isPending && !canJoin && (
         <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
           <Clock className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
           <div className="flex-1">
@@ -101,7 +125,7 @@ export default function UpcomingInterviewDetailPage() {
         </div>
       )}
 
-      {isClosed && (
+      {isClosed && !canJoin && (
         <div className="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
           <Clock className="h-5 w-5 shrink-0 text-destructive" />
           <div className="flex-1">
@@ -212,16 +236,68 @@ export default function UpcomingInterviewDetailPage() {
       )}
 
       {/* Bottom CTA */}
-      {isOpen && (
-        <div className="flex justify-end pb-4">
-          <Button asChild size="lg">
-            <Link href={ROUTES.candidate.interview(data.id)}>
-              <PlayCircle className="mr-2 h-4 w-4" />
-              Start Interview
-            </Link>
-          </Button>
+      {canJoin && (
+        <div className="flex justify-stretch pb-4 sm:justify-end">
+          <StartAssignedButton
+            interview={data}
+            size="lg"
+            isPending={start.isPending}
+            errorMessage={start.error?.message}
+            onStart={handleStart}
+            className="w-full sm:w-auto"
+          />
         </div>
       )}
+    </div>
+  );
+}
+
+function StartAssignedButton({
+  interview,
+  size,
+  isPending,
+  errorMessage,
+  onStart,
+  className,
+}: {
+  interview: UpcomingInterviewDetail;
+  size: "sm" | "lg";
+  isPending: boolean;
+  errorMessage?: string;
+  onStart: () => void;
+  className?: string;
+}) {
+  const label =
+    interview.status === "IN_PROGRESS" ? "Continue Interview" : "Join Interview";
+
+  return (
+    <div className={cn("flex flex-col items-stretch gap-2 sm:items-end", className)}>
+      {errorMessage ? (
+        <p className="text-xs text-destructive sm:max-w-xs sm:text-right">
+          {errorMessage}
+        </p>
+      ) : null}
+      <Button
+        size={size}
+        onClick={onStart}
+        disabled={isPending}
+        aria-busy={isPending}
+        className="w-full sm:w-auto"
+      >
+        {isPending ? (
+          <>
+            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            Starting…
+          </>
+        ) : (
+          <>
+            <PlayCircle className={size === "lg" ? "mr-2 h-4 w-4" : "mr-1 h-3.5 w-3.5"} />
+            {size === "lg" && interview.status !== "IN_PROGRESS"
+              ? "Start Interview"
+              : label}
+          </>
+        )}
+      </Button>
     </div>
   );
 }

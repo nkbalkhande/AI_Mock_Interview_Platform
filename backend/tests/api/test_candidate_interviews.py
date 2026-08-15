@@ -23,7 +23,12 @@ from fastapi.testclient import TestClient
 from app.api.dependencies.auth import get_current_user
 from app.api.v1.candidate import interview_router
 from app.api.v1.candidate.interview_router import get_lifecycle_service
-from app.core.exceptions import AuthenticationError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AuthenticationError,
+    BusinessRuleError,
+    NotFoundError,
+    ValidationError,
+)
 from app.main import create_app
 
 
@@ -102,6 +107,9 @@ class _FakeService:
 
     async def create_role_practice(self, **kwargs: Any) -> Any:
         return await self._dispatch("create_role_practice", **kwargs)
+
+    async def start_assigned(self, **kwargs: Any) -> Any:
+        return await self._dispatch("start_assigned", **kwargs)
 
     async def get_state(self, **kwargs: Any) -> Any:
         return await self._dispatch("get_state", **kwargs)
@@ -362,6 +370,99 @@ def test_role_start_bounds_custom_role_lists_and_items(
     )
 
     assert response.status_code == 422
+
+
+# ---------------------- POST /assigned/{id}/start ----------------------
+
+
+def test_start_assigned_happy_path(client: TestClient) -> None:
+    candidate = _candidate()
+    client.app.dependency_overrides[get_current_user] = lambda: candidate
+
+    fake = _FakeService()
+    interview_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    first_q = _made_question(number=1, text="Walk me through a recent backend project.")
+    fake.configure(
+        "start_assigned",
+        returns=SimpleNamespace(
+            interview_id=interview_id,
+            session_id=session_id,
+            total_questions=7,
+            duration_minutes=45,
+            first_question=first_q,
+            role_name="Backend Engineer",
+        ),
+    )
+    _install_fake(client, fake)
+
+    resp = client.post(
+        f"/api/v1/candidate/interviews/assigned/{interview_id}/start"
+    )
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["session_id"] == str(session_id)
+    assert body["interview"]["id"] == str(interview_id)
+    assert body["interview"]["interview_type"] == "ASSIGNED"
+    assert body["interview"]["practice_type"] is None
+    assert body["interview"]["role_name"] == "Backend Engineer"
+    assert body["current_question"]["question_text"].startswith("Walk me through")
+    assert fake.calls[0][0] == "start_assigned"
+    assert fake.calls[0][1]["interview_id"] == interview_id
+    assert fake.calls[0][1]["candidate"].id == candidate.id
+
+
+def test_start_assigned_requires_authentication(client: TestClient) -> None:
+    def _raise() -> SimpleNamespace:
+        raise AuthenticationError("Authentication is required.")
+
+    client.app.dependency_overrides[get_current_user] = _raise
+
+    resp = client.post(f"/api/v1/candidate/interviews/assigned/{uuid.uuid4()}/start")
+
+    assert resp.status_code == 401
+
+
+def test_start_assigned_forbidden_for_admin(client: TestClient) -> None:
+    client.app.dependency_overrides[get_current_user] = _admin
+
+    resp = client.post(f"/api/v1/candidate/interviews/assigned/{uuid.uuid4()}/start")
+
+    assert resp.status_code == 403
+
+
+def test_start_assigned_not_found(client: TestClient) -> None:
+    candidate = _candidate()
+    client.app.dependency_overrides[get_current_user] = lambda: candidate
+
+    fake = _FakeService()
+    fake.configure("start_assigned", raises=NotFoundError("Interview not found."))
+    _install_fake(client, fake)
+
+    resp = client.post(f"/api/v1/candidate/interviews/assigned/{uuid.uuid4()}/start")
+
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "not_found"
+
+
+def test_start_assigned_window_closed(client: TestClient) -> None:
+    candidate = _candidate()
+    client.app.dependency_overrides[get_current_user] = lambda: candidate
+
+    fake = _FakeService()
+    fake.configure(
+        "start_assigned",
+        raises=BusinessRuleError(
+            "The access window for this interview has closed."
+        ),
+    )
+    _install_fake(client, fake)
+
+    resp = client.post(f"/api/v1/candidate/interviews/assigned/{uuid.uuid4()}/start")
+
+    assert resp.status_code == 400
+    assert "access window" in resp.json()["error"]["message"]
 
 
 # ---------------------- GET /sessions/{id}/result ----------------------

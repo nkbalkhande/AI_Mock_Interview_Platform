@@ -235,6 +235,35 @@ class AssignedResultListResponse(BaseModel):
     page_size: int
 
 
+class AssignedResultDetail(BaseModel):
+    """Result view for a single assigned interview session.
+
+    Assigned results are only revealed after the admin submits the final
+    decision. Until then ``status`` is ``PENDING_REVIEW`` and every AI/admin
+    field stays null — the AI recommendation must never reach the candidate
+    ahead of the admin's decision.
+    """
+
+    interview_id: uuid.UUID
+    session_id: uuid.UUID
+    role: str | None = None
+    duration_minutes: int | None = None
+    scheduled_at: datetime | None = None
+    completed_at: datetime | None = None
+    assigned_by_name: str | None = None
+    status: str = Field(description="PENDING_REVIEW or PUBLISHED")
+    ai_overall_score: Decimal | None = None
+    ai_verdict: str | None = None
+    ai_summary: str | None = None
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    improvement_areas: list[str] = Field(default_factory=list)
+    admin_decision: str | None = None
+    admin_feedback: str | None = None
+    decided_by_name: str | None = None
+    result_published_at: datetime | None = None
+
+
 # ── Interview History ────────────────────────────────────────────────────
 
 class InterviewHistoryItem(BaseModel):

@@ -125,6 +125,10 @@ export interface InterviewListItem {
   admin_decision: string | null;
   answered_count: number;
   total_questions: number;
+  timezone: string | null;
+  original_scheduled_at: string | null;
+  reschedule_count: number;
+  can_reschedule: boolean;
 }
 
 export interface InterviewListResponse {
@@ -193,6 +197,31 @@ export interface InterviewDetailResponse {
   resume_file_name: string | null;
   resume_file_path: string | null;
   events: InterviewDetailEvent[];
+  original_scheduled_at: string | null;
+  rescheduled_at: string | null;
+  reschedule_count: number;
+  reschedule_reason: string | null;
+  rescheduled_by_name: string | null;
+  can_reschedule: boolean;
+}
+
+export interface RescheduleInterviewRequest {
+  new_scheduled_at: string;
+  reason?: string | null;
+  notify_candidate?: boolean;
+  duration_minutes?: number | null;
+  timezone?: string | null;
+}
+
+export interface RescheduleInterviewResponse {
+  success: boolean;
+  message: string;
+  interview_id: string;
+  status: string;
+  scheduled_at: string;
+  original_scheduled_at: string | null;
+  reschedule_count: number;
+  notification_sent: boolean;
 }
 
 export interface AssignInterviewRequest {

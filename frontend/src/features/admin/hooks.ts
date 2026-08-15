@@ -13,6 +13,7 @@ import {
   getJobRoles,
   getUserDetail,
   getUsers,
+  rescheduleInterview,
   submitDecision,
   updateUserStatus,
 } from "./api";
@@ -24,6 +25,8 @@ import type {
   EvaluationListResponse,
   InterviewDetailResponse,
   InterviewListResponse,
+  RescheduleInterviewRequest,
+  RescheduleInterviewResponse,
   JobRoleItem,
   SubmitDecisionResponse,
   UpdateUserStatusResponse,
@@ -149,6 +152,23 @@ export function useCancelInterview() {
     mutationFn: cancelInterview,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminKeys.all });
+    },
+  });
+}
+
+export function useRescheduleInterview() {
+  const qc = useQueryClient();
+  return useMutation<
+    RescheduleInterviewResponse,
+    ApiError,
+    { interviewId: string } & RescheduleInterviewRequest
+  >({
+    mutationFn: ({ interviewId, ...body }) =>
+      rescheduleInterview(interviewId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.all });
+      qc.invalidateQueries({ queryKey: ["candidate"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

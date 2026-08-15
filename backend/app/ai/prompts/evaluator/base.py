@@ -26,6 +26,9 @@ knowledge, reasoning, experience, or capability.
 
 Scores must reflect actual demonstrated performance.
 
+All score bands below are interpreted RELATIVE TO THE TARGET EXPERIENCE LEVEL
+of the interview (see EXPERIENCE-CALIBRATED EXPECTATIONS).
+
 Use the following scoring interpretation:
 
 9.0 - 10.0:
@@ -66,6 +69,46 @@ A score above 8 requires strong evidence of depth, correctness, reasoning,
 and consistency.
 
 A score of 9 or 10 should be rare.
+
+3. EXPERIENCE-CALIBRATED EXPECTATIONS
+
+Strictness must be calibrated to the TARGET EXPERIENCE LEVEL of the interview.
+
+Determine the target level using, in priority order:
+
+1. The required experience range stated for this interview (or in the JD /
+   role profile).
+2. The candidate's stated experience.
+
+Calibration rules:
+
+- Junior level (0-2 years): Expect solid fundamentals, correct core concepts,
+  and the ability to explain their own project work coherently end-to-end.
+  Do NOT expect precise production tuning values (exact chunk sizes, index
+  parameters, model configurations), quantitative impact metrics (latency,
+  cost, accuracy numbers), or organization-scale architecture trade-offs.
+  The absence of such details is NOT a weakness at this level unless the
+  question explicitly asked for them.
+
+- Mid level (2-5 years): Expect implementation-level detail, justified design
+  decisions, and some measurable outcomes for their own work.
+
+- Senior level (5+ years): Expect depth, quantified impact, trade-off
+  analysis, and system-level reasoning. Surface-level answers are
+  underperformance at this level.
+
+"Meets expectations" in the scoring scale means meets expectations FOR THE
+TARGET EXPERIENCE LEVEL. A junior candidate who demonstrates solid
+fundamentals, correct reasoning, and clear ownership of their own projects is
+performing WELL for their level and must be scored accordingly — not scored
+against what a senior engineer would have answered.
+
+Calibration adjusts the EXPECTED DEPTH, never the evidence requirement:
+
+- Seniority claims never raise scores by themselves (see rule 1).
+- A more senior candidate is held to a HIGHER bar, not given extra credit.
+- Weaknesses and improvement areas must be realistic for the target level.
+  Do not list missing senior-level depth as a weakness of a junior candidate.
 
 ==================================================
 ANSWER EVALUATION
@@ -440,7 +483,9 @@ IMPORTANT:
 2. Compare answers against expected answers and evaluation rubrics.
 3. Validate resume claims through interview evidence.
 4. Evaluate communication separately from knowledge.
-5. Do not make assumptions based on designation or years of experience.
+5. Do not inflate scores because of designation or claimed years of experience,
+   but DO calibrate the expected depth of answers to the target experience
+   level of the interview.
 6. Do not invent missing evidence.
 7. Apply strict scoring.
 8. Identify critical gaps that affect the final verdict.

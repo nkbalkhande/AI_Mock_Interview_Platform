@@ -12,7 +12,8 @@ const STATUS_LABELS: Record<string, string> = {
   ADMIN_REVIEW: "Under review",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
-  EXPIRED: "Expired",
+  EXPIRED: "Missed",
+  RESCHEDULED: "Rescheduled",
 };
 
 const STATUS_VARIANTS: Record<
@@ -30,6 +31,7 @@ const STATUS_VARIANTS: Record<
   COMPLETED: "success",
   CANCELLED: "destructive",
   EXPIRED: "destructive",
+  RESCHEDULED: "warning",
 };
 
 export function InterviewStatusBadge({ status }: { status: string }) {

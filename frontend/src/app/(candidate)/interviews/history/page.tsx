@@ -283,7 +283,8 @@ function InterviewAction({
   if (
     item.display_status === "Interrupted" ||
     item.display_status === "Abandoned" ||
-    item.display_status === "Expired"
+    item.display_status === "Expired" ||
+    item.display_status === "Missed"
   ) {
     return (
       <Badge variant="destructive" className="text-xs">
@@ -298,6 +299,15 @@ function InterviewAction({
       <Badge variant="destructive" className="text-xs">
         <XCircle className="mr-1 h-3 w-3" />
         Cancelled
+      </Badge>
+    );
+  }
+
+  if (item.display_status === "Rescheduled") {
+    return (
+      <Badge variant="outline" className="text-xs">
+        <CalendarClock className="mr-1 h-3 w-3" />
+        Rescheduled
       </Badge>
     );
   }

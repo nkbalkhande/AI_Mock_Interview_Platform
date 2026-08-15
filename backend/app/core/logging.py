@@ -51,6 +51,22 @@ def configure_logging() -> None:
         logging.INFO if settings.postgres.echo else logging.WARNING
     )
 
+    # At DEBUG these libraries dump entire prompts, HTTP payloads, and
+    # cost tables, burying application errors in the terminal. Cap them
+    # at WARNING regardless of the app log level — real failures (rate
+    # limits, auth errors, timeouts) still come through.
+    for noisy in (
+        "LiteLLM",
+        "LiteLLM Router",
+        "LiteLLM Proxy",
+        "litellm",
+        "httpx",
+        "httpcore",
+        "openai",
+        "asyncio",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     _CONFIGURED = True
 
 

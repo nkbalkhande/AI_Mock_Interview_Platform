@@ -87,6 +87,7 @@ from app.repositories.interview_session_repository import (
     InterviewSessionRepository,
 )
 from app.repositories.job_role_repository import JobRoleRepository
+from app.services.interviews.access_window import AccessState, access_state
 from app.services.interviews.evaluator import (
     InterviewEvaluator,
     TranscriptEntry,
@@ -521,6 +522,167 @@ class InterviewLifecycleService:
             role_name=role_name,
         )
 
+    async def start_assigned(
+        self,
+        *,
+        candidate: User,
+        interview_id: uuid.UUID,
+    ) -> StartedInterview:
+        """Start (or resume) an admin-assigned interview inside its window.
+
+        Assigned interviews are created without a session. Joining creates
+        the session, snapshots planner state from the frozen JD/resume, and
+        generates the first question. Re-joining an in-progress attempt is
+        idempotent and returns the existing session.
+        """
+        interview = await self._interviews.get_owned_for_start(
+            interview_id, candidate.id
+        )
+        if interview is None or interview.interview_type != "ASSIGNED":
+            raise NotFoundError("Interview not found.")
+
+        if interview.status in {"CANCELLED", "EXPIRED"}:
+            raise BusinessRuleError("This interview is no longer available.")
+        if interview.status in {
+            "SUBMITTED",
+            "AI_EVALUATED",
+            "ADMIN_REVIEW",
+            "COMPLETED",
+        }:
+            raise ConflictError("This interview has already been submitted.")
+        if interview.status == "DRAFT":
+            raise NotFoundError("Interview not found.")
+
+        existing = _latest_resumable_session(interview)
+        if existing is not None:
+            return await self._resume_assigned_session(
+                candidate=candidate,
+                interview=interview,
+                session=existing,
+            )
+
+        window = access_state(interview)
+        if window is AccessState.PENDING:
+            raise BusinessRuleError(
+                "This interview is not yet available. Wait until the "
+                "access window opens."
+            )
+        if window is AccessState.CLOSED:
+            raise BusinessRuleError(
+                "The access window for this interview has closed."
+            )
+
+        resume = _resume_from_assigned_interview(interview)
+        designation, experience = _extract_profile_summary(candidate)
+        duration = interview.duration_minutes
+        total_target = _compute_target_questions(duration)
+        target_context = _assigned_target_context(interview)
+
+        started_at = datetime.now(timezone.utc)
+        attempt_number = _next_attempt_number(interview)
+        session = InterviewSession(
+            interview_id=interview.id,
+            attempt_number=attempt_number,
+            status="IN_PROGRESS",
+            started_at=started_at,
+            last_activity_at=started_at,
+            current_question_number=0,
+            interview_state={
+                "duration_minutes": duration,
+                "total_target_questions": total_target,
+                "coverage": _initial_coverage(),
+                "resume_snippet": _snapshot_resume_text(resume),
+                "resume_version_id": str(resume.version_id),
+                "resume_file_name": resume.file_name,
+                "candidate_designation": designation,
+                "candidate_experience": experience,
+                "target_context": {
+                    "kind": target_context.kind,
+                    "label": target_context.label,
+                    "content": target_context.content,
+                },
+                "prompt_version_planner": None,
+            },
+        )
+        self._session.add(session)
+        interview.status = "IN_PROGRESS"
+        await self._session.flush()
+
+        await self._events.record(
+            interview_id=interview.id,
+            session_id=session.id,
+            event_type="INTERVIEW_STARTED",
+            actor_user_id=candidate.id,
+            metadata={"attempt_number": session.attempt_number},
+        )
+
+        first_question = await self._generate_and_persist_question(
+            interview=interview,
+            session=session,
+            resume=resume,
+            candidate=candidate,
+            question_number=1,
+            history=[],
+        )
+        await self._session.commit()
+        return StartedInterview(
+            interview_id=interview.id,
+            session_id=session.id,
+            total_questions=total_target,
+            duration_minutes=duration,
+            first_question=first_question,
+            role_name=interview.role_name_snapshot,
+        )
+
+    async def _resume_assigned_session(
+        self,
+        *,
+        candidate: User,
+        interview: Interview,
+        session: InterviewSession,
+    ) -> StartedInterview:
+        """Return an already-started assigned session, generating Q1 if missing."""
+        if session.status == "PAUSED":
+            session.status = "IN_PROGRESS"
+        if session.status == "NOT_STARTED":
+            now = datetime.now(timezone.utc)
+            session.status = "IN_PROGRESS"
+            session.started_at = session.started_at or now
+            session.last_activity_at = now
+        if interview.status != "IN_PROGRESS":
+            interview.status = "IN_PROGRESS"
+
+        questions = sorted(session.questions, key=lambda q: q.question_number)
+        if not questions:
+            resume = _resume_from_assigned_interview(interview)
+            first_question = await self._generate_and_persist_question(
+                interview=interview,
+                session=session,
+                resume=resume,
+                candidate=candidate,
+                question_number=1,
+                history=[],
+            )
+            await self._session.commit()
+            return StartedInterview(
+                interview_id=interview.id,
+                session_id=session.id,
+                total_questions=_read_total_target(session.interview_state),
+                duration_minutes=interview.duration_minutes,
+                first_question=first_question,
+                role_name=interview.role_name_snapshot,
+            )
+
+        await self._session.commit()
+        return StartedInterview(
+            interview_id=interview.id,
+            session_id=session.id,
+            total_questions=_read_total_target(session.interview_state),
+            duration_minutes=interview.duration_minutes,
+            first_question=questions[-1],
+            role_name=interview.role_name_snapshot,
+        )
+
     # ---------------------- read ----------------------
 
     async def get_state(
@@ -929,6 +1091,7 @@ class InterviewLifecycleService:
                 interview, evaluation_state
             )
 
+            required_experience = _format_required_experience(interview)
             if evaluation_target.kind == "ROLE":
                 result = await self._evaluator.evaluate_role(
                     target_label=evaluation_target.label,
@@ -941,6 +1104,7 @@ class InterviewLifecycleService:
                         "candidate_experience"
                     ),
                     transcript=transcript,
+                    required_experience=required_experience,
                 )
             else:
                 result = await self._evaluator.evaluate_jd(
@@ -953,6 +1117,7 @@ class InterviewLifecycleService:
                         "candidate_experience"
                     ),
                     transcript=transcript,
+                    required_experience=required_experience,
                 )
 
             # Guard against duplicate FINAL rows (partial unique index).
@@ -1567,6 +1732,24 @@ def _format_role_target(snapshot: dict) -> str:
     )
 
 
+def _format_required_experience(interview: Interview) -> str | None:
+    """Human-readable required experience range for evaluator calibration.
+
+    Assigned interviews always carry the admin-entered range; role-based
+    practice may carry the role profile's range. Returns ``None`` when
+    neither bound is set so the evaluator falls back to JD/profile text.
+    """
+    lo = interview.required_experience_min
+    hi = interview.required_experience_max
+    if lo is None and hi is None:
+        return None
+    if lo is not None and hi is not None:
+        return f"{lo} to {hi} years"
+    if lo is not None:
+        return f"{lo}+ years"
+    return f"up to {hi} years"
+
+
 def _read_target_context(interview: Interview, state: dict) -> TargetContext:
     stored = state.get("target_context")
     if isinstance(stored, dict):
@@ -1584,6 +1767,69 @@ def _read_target_context(interview: Interview, state: dict) -> TargetContext:
         kind="JD",
         label="Job description",
         content=interview.job_description_snapshot or "",
+    )
+
+
+_RESUMABLE_SESSION_STATUSES = {"NOT_STARTED", "IN_PROGRESS", "PAUSED"}
+
+
+def _latest_resumable_session(interview: Interview) -> InterviewSession | None:
+    sessions = sorted(
+        interview.sessions or [],
+        key=lambda item: item.attempt_number,
+        reverse=True,
+    )
+    for session in sessions:
+        if session.status in _RESUMABLE_SESSION_STATUSES:
+            return session
+    return None
+
+
+def _next_attempt_number(interview: Interview) -> int:
+    attempts = [session.attempt_number for session in (interview.sessions or [])]
+    return (max(attempts) + 1) if attempts else 1
+
+
+def _resume_from_assigned_interview(interview: Interview) -> CurrentResume:
+    version = interview.resume_version
+    if version is None:
+        raise BusinessRuleError(
+            "A resume is required to start this interview. Upload a resume "
+            "and ask your interviewer to reassign it."
+        )
+    return CurrentResume(
+        version_id=version.id,
+        extracted_text=version.extracted_text,
+        file_name=version.file_name,
+    )
+
+
+def _assigned_target_context(interview: Interview) -> TargetContext:
+    jd = (interview.job_description_snapshot or "").strip()
+    role = (interview.role_name_snapshot or "").strip()
+    requirements = (interview.role_requirements_snapshot or "").strip()
+    parts: list[str] = []
+    if role:
+        parts.append(f"Role: {role}")
+    if jd:
+        parts.append(jd)
+    if requirements:
+        parts.append(f"Role requirements:\n{requirements}")
+    content = "\n\n".join(parts)
+    if not content:
+        raise BusinessRuleError(
+            "This interview is missing a job description or role snapshot."
+        )
+    if jd:
+        return TargetContext(
+            kind="JD",
+            label=role or "Job description",
+            content=content,
+        )
+    return TargetContext(
+        kind="ROLE",
+        label=role or "Assigned interview",
+        content=content,
     )
 
 

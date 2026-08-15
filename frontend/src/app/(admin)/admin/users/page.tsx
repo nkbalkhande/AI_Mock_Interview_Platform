@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MobileField } from "@/components/admin/mobile-field";
 import { useUpdateUserStatus, useUsers } from "@/features/admin/hooks";
 import { ROUTES } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
@@ -111,7 +112,8 @@ export default function UsersPage() {
             </p>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* Desktop table (md+) */}
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -202,11 +204,105 @@ export default function UsersPage() {
                 </Table>
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
+              {/* Mobile card list (<md) */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {data.items.map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex flex-col gap-3 rounded-lg border bg-card p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{user.full_name}</p>
+                        <p className="break-all text-xs text-muted-foreground">
+                          {user.email}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={user.is_active ? "default" : "destructive"}
+                        className="text-xs"
+                      >
+                        {user.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1">
+                      {user.roles.map((r) => (
+                        <Badge key={r} variant="secondary" className="text-xs">
+                          {r}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      <MobileField
+                        label="Organization"
+                        value={user.current_organization ?? "—"}
+                      />
+                      <MobileField
+                        label="Designation"
+                        value={user.current_designation ?? "—"}
+                      />
+                      <MobileField
+                        label="Experience"
+                        value={
+                          user.years_of_experience
+                            ? `${user.years_of_experience} yrs`
+                            : "—"
+                        }
+                      />
+                      <MobileField
+                        label="Joined"
+                        value={formatDate(user.created_at)}
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="flex-1"
+                      >
+                        <Link href={`${ROUTES.admin.users}/${user.id}`}>
+                          <Eye className="mr-1.5 h-4 w-4" />
+                          View
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() =>
+                          updateStatus.mutate({
+                            userId: user.id,
+                            isActive: !user.is_active,
+                          })
+                        }
+                        disabled={updateStatus.isPending}
+                      >
+                        {user.is_active ? (
+                          <>
+                            <ShieldOff className="mr-1.5 h-4 w-4 text-destructive" />
+                            Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="mr-1.5 h-4 w-4 text-emerald-600" />
+                            Activate
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
                   Showing {data.items.length} of {data.total} users
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2 sm:justify-end">
                   <Button
                     variant="outline"
                     size="sm"

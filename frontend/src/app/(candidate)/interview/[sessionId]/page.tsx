@@ -51,7 +51,9 @@ export default function InterviewSessionPage() {
     { refetch: false },
   );
 
-  // Auto-redirect once the server considers the session finished.
+  // Auto-redirect once the server considers the session finished. Assigned
+  // interviews have no immediate report (results wait for admin review), so
+  // they land on the assigned result page instead of the practice one.
   useEffect(() => {
     if (!data || !sessionId) return;
     if (
@@ -60,7 +62,11 @@ export default function InterviewSessionPage() {
       data.session_status === "EVALUATED" ||
       data.session_status === "COMPLETED"
     ) {
-      router.replace(ROUTES.candidate.practiceResult(sessionId));
+      router.replace(
+        data.interview.interview_type === "ASSIGNED"
+          ? ROUTES.candidate.assignedResult(sessionId)
+          : ROUTES.candidate.practiceResult(sessionId),
+      );
     }
   }, [data, sessionId, router]);
 
@@ -68,11 +74,11 @@ export default function InterviewSessionPage() {
     return <PlayerErrorState message="Missing session id in the URL." />;
   }
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return <PlayerLoadingState />;
   }
 
-  if (isError) {
+  if (isError || !data) {
     return (
       <PlayerErrorState
         message={error?.message ?? "Could not load this session."}
@@ -189,8 +195,12 @@ function PlayerBody({ sessionId, data }: PlayerBodyProps) {
 
   const handleInterviewSubmit = useCallback(async () => {
     const result = await submitInterview.mutateAsync();
-    router.replace(ROUTES.candidate.practiceResult(result.session_id));
-  }, [submitInterview, router]);
+    router.replace(
+      data.interview.interview_type === "ASSIGNED"
+        ? ROUTES.candidate.assignedResult(result.session_id)
+        : ROUTES.candidate.practiceResult(result.session_id),
+    );
+  }, [submitInterview, router, data.interview.interview_type]);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -201,11 +211,12 @@ function PlayerBody({ sessionId, data }: PlayerBodyProps) {
           currentNumber={data.current_question_number || 1}
           totalQuestions={data.total_questions}
           answeredCount={data.answered_count}
-          className="flex-1"
+          className="flex-1 min-w-0"
         />
         <InterviewTimer
           durationMinutes={data.interview.duration_minutes}
           startedAt={data.interview.started_at}
+          className="self-start sm:self-auto"
         />
       </div>
 
@@ -277,6 +288,7 @@ function PlayerBody({ sessionId, data }: PlayerBodyProps) {
             onClick={handleAnswerSubmit}
             disabled={!canSubmitAnswer}
             aria-busy={submitAnswer.isPending || submitCoding.isPending}
+            className="w-full sm:w-auto"
           >
             {submitAnswer.isPending || submitCoding.isPending ? (
               <>
@@ -303,6 +315,7 @@ function PlayerBody({ sessionId, data }: PlayerBodyProps) {
             onClick={handleInterviewSubmit}
             disabled={submitInterview.isPending}
             aria-busy={submitInterview.isPending}
+            className="w-full sm:w-auto"
           >
             {submitInterview.isPending ? (
               <>

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardCheck, Eye, PlusCircle, Search, XCircle } from "lucide-react";
+import { CalendarClock, ClipboardCheck, Eye, PlusCircle, Search, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MobileField } from "@/components/admin/mobile-field";
+import { RescheduleInterviewDialog } from "@/components/admin/reschedule-interview-dialog";
 import { useCancelInterview, useInterviews } from "@/features/admin/hooks";
+import type { InterviewListItem } from "@/features/admin/types";
 import { ROUTES } from "@/lib/constants";
 import { formatDateTime, formatDuration, formatScore } from "@/lib/format";
 
@@ -26,6 +29,7 @@ const QUICK_FILTERS = [
   { label: "All", value: "" },
   { label: "In Progress", value: "IN_PROGRESS_GROUP" },
   { label: "Completed", value: "COMPLETED_GROUP" },
+  { label: "Missed", value: "MISSED_GROUP" },
   { label: "Cancelled", value: "CANCELLED_GROUP" },
 ] as const;
 
@@ -44,6 +48,7 @@ function statusVariant(
     IN_PROGRESS: "secondary",
     CANCELLED: "destructive",
     EXPIRED: "destructive",
+    RESCHEDULED: "secondary",
     SUBMITTED: "secondary",
     AI_EVALUATED: "secondary",
     ADMIN_REVIEW: "secondary",
@@ -92,6 +97,9 @@ function InterviewsPageContent() {
   });
 
   const cancel = useCancelInterview();
+  const [rescheduleTarget, setRescheduleTarget] =
+    useState<InterviewListItem | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const totalPages = data ? Math.ceil(data.total / data.page_size) : 0;
 
   function applyStatusFilter(value: string) {
@@ -111,16 +119,21 @@ function InterviewsPageContent() {
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Interviews
           </h1>
           <p className="text-sm text-muted-foreground">
             View and manage all interviews.
           </p>
+          {successMessage ? (
+            <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
+              {successMessage}
+            </p>
+          ) : null}
         </div>
-        <Button asChild>
+        <Button asChild className="w-full sm:w-auto">
           <Link href={ROUTES.admin.assign}>
             <PlusCircle className="mr-2 h-4 w-4" />
             Assign Interview
@@ -171,6 +184,7 @@ function InterviewsPageContent() {
                   "COMPLETED",
                   "CANCELLED",
                   "EXPIRED",
+                  "RESCHEDULED",
                 ].includes(statusFilter)
                   ? statusFilter
                   : ""
@@ -189,7 +203,8 @@ function InterviewsPageContent() {
               <option value="ADMIN_REVIEW">Admin Review</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>
-              <option value="EXPIRED">Expired</option>
+              <option value="EXPIRED">Missed</option>
+              <option value="RESCHEDULED">Rescheduled</option>
             </select>
             <select
               value={typeFilter}
@@ -218,7 +233,8 @@ function InterviewsPageContent() {
             </p>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* Desktop table (md+) */}
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -318,6 +334,17 @@ function InterviewsPageContent() {
                                   </Link>
                                 </Button>
                               ) : null}
+                              {iv.can_reschedule ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  title="Reschedule Interview"
+                                  onClick={() => setRescheduleTarget(iv)}
+                                >
+                                  <CalendarClock className="mr-1.5 h-4 w-4" />
+                                  Reschedule
+                                </Button>
+                              ) : null}
                               {canCancel ? (
                                 <Button
                                   variant="ghost"
@@ -338,11 +365,136 @@ function InterviewsPageContent() {
                 </Table>
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
+              {/* Mobile card list (<md) */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {data.items.map((iv) => {
+                  const badgeLabel = (iv.display_status ?? iv.status).replace(
+                    /_/g,
+                    " ",
+                  );
+                  const canCancel = !NON_CANCELLABLE.has(iv.status);
+                  const canReview =
+                    !!iv.session_id && EVALUATION_STATUSES.has(iv.status);
+                  return (
+                    <div
+                      key={iv.id}
+                      className="flex flex-col gap-3 rounded-lg border bg-card p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {iv.candidate_name}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {iv.candidate_email}
+                          </p>
+                        </div>
+                        <Badge
+                          variant={statusVariant(iv.status)}
+                          className="text-xs"
+                        >
+                          {badgeLabel}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                        <MobileField label="Role" value={iv.role ?? "—"} />
+                        <MobileField
+                          label="Type"
+                          value={
+                            iv.interview_type +
+                            (iv.practice_type
+                              ? ` / ${iv.practice_type.replace("_", " ")}`
+                              : "")
+                          }
+                        />
+                        <MobileField
+                          label="Scheduled"
+                          value={formatDateTime(iv.scheduled_at)}
+                        />
+                        <MobileField
+                          label="Duration"
+                          value={formatDuration(iv.duration_minutes)}
+                        />
+                        <MobileField
+                          label="Started"
+                          value={formatDateTime(iv.started_at)}
+                        />
+                        <MobileField
+                          label="Completed"
+                          value={formatDateTime(iv.completed_at)}
+                        />
+                        <MobileField
+                          label="Score"
+                          value={formatScore(iv.overall_score)}
+                        />
+                        <MobileField
+                          label="Assigned By"
+                          value={iv.assigned_by_name ?? "—"}
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                          className="flex-1"
+                        >
+                          <Link href={`${ROUTES.admin.interviews}/${iv.id}`}>
+                            <Eye className="mr-1.5 h-4 w-4" />
+                            View
+                          </Link>
+                        </Button>
+                        {canReview ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="flex-1"
+                          >
+                            <Link
+                              href={`${ROUTES.admin.evaluations}/${iv.session_id}`}
+                            >
+                              <ClipboardCheck className="mr-1.5 h-4 w-4" />
+                              Review
+                            </Link>
+                          </Button>
+                        ) : null}
+                        {iv.can_reschedule ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => setRescheduleTarget(iv)}
+                          >
+                            <CalendarClock className="mr-1.5 h-4 w-4" />
+                            Reschedule
+                          </Button>
+                        ) : null}
+                        {canCancel ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 text-destructive hover:text-destructive"
+                            onClick={() => cancel.mutate(iv.id)}
+                            disabled={cancel.isPending}
+                          >
+                            <XCircle className="mr-1.5 h-4 w-4" />
+                            Cancel
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
                   Showing {data.items.length} of {data.total} interviews
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2 sm:justify-end">
                   <Button
                     variant="outline"
                     size="sm"
@@ -368,6 +520,17 @@ function InterviewsPageContent() {
           )}
         </CardContent>
       </Card>
+
+      <RescheduleInterviewDialog
+        interview={rescheduleTarget}
+        open={rescheduleTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setRescheduleTarget(null);
+        }}
+        onSuccess={(message) => {
+          setSuccessMessage(message);
+        }}
+      />
     </div>
   );
 }

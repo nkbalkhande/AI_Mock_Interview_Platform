@@ -49,6 +49,7 @@ INTERVIEW_STATUSES = (
     "COMPLETED",
     "CANCELLED",
     "EXPIRED",
+    "RESCHEDULED",
 )
 
 
@@ -103,9 +104,27 @@ class Interview(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         String(30), nullable=False, server_default=text("'DRAFT'")
     )
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rescheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reschedule_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    reschedule_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rescheduled_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     candidate: Mapped[User] = relationship(foreign_keys=[candidate_id])
     assigned_by_user: Mapped[User | None] = relationship(foreign_keys=[assigned_by])
+    rescheduled_by_user: Mapped[User | None] = relationship(
+        foreign_keys=[rescheduled_by]
+    )
     job_role: Mapped[JobRole | None] = relationship(
         back_populates="interviews", foreign_keys=[job_role_id]
     )
@@ -135,7 +154,7 @@ class Interview(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         CheckConstraint(
             "status IN ('DRAFT', 'ASSIGNED', 'SCHEDULED', 'AVAILABLE', 'IN_PROGRESS', "
             "'SUBMITTED', 'AI_EVALUATED', 'ADMIN_REVIEW', 'COMPLETED', 'CANCELLED', "
-            "'EXPIRED')",
+            "'EXPIRED', 'RESCHEDULED')",
             name="chk_interview_status",
         ),
         CheckConstraint(

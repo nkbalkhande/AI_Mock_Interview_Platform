@@ -8,6 +8,8 @@ import type {
   EvaluationListResponse,
   InterviewDetailResponse,
   InterviewListResponse,
+  RescheduleInterviewRequest,
+  RescheduleInterviewResponse,
   JobRoleItem,
   SubmitDecisionResponse,
   UpdateUserStatusResponse,
@@ -107,6 +109,17 @@ export async function cancelInterview(
 ): Promise<InterviewDetailResponse> {
   const { data } = await apiClient.patch<InterviewDetailResponse>(
     `/admin/interviews/${interviewId}/cancel`,
+  );
+  return data;
+}
+
+export async function rescheduleInterview(
+  interviewId: string,
+  request: RescheduleInterviewRequest,
+): Promise<RescheduleInterviewResponse> {
+  const { data } = await apiClient.patch<RescheduleInterviewResponse>(
+    `/admin/interviews/${interviewId}/reschedule`,
+    request,
   );
   return data;
 }

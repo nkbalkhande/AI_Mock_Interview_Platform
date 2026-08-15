@@ -148,6 +148,31 @@ export interface AssignedResultListResponse {
   page_size: number;
 }
 
+/**
+ * Result of one assigned interview session. ``PENDING_REVIEW`` until the
+ * admin publishes a final decision; AI/admin fields are null until then.
+ */
+export interface AssignedResultDetail {
+  interview_id: string;
+  session_id: string;
+  role: string | null;
+  duration_minutes: number | null;
+  scheduled_at: string | null;
+  completed_at: string | null;
+  assigned_by_name: string | null;
+  status: "PENDING_REVIEW" | "PUBLISHED";
+  ai_overall_score: string | null;
+  ai_verdict: string | null;
+  ai_summary: string | null;
+  strengths: string[];
+  weaknesses: string[];
+  improvement_areas: string[];
+  admin_decision: string | null;
+  admin_feedback: string | null;
+  decided_by_name: string | null;
+  result_published_at: string | null;
+}
+
 export interface RecentResultsResponse {
   practice: PracticeResultSummary[];
   assigned: AssignedResultSummary[];

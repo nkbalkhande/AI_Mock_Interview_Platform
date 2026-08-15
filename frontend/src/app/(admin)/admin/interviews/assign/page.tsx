@@ -219,7 +219,7 @@ export default function AssignInterviewPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="required_experience_min">
                   Min Experience (yrs)
@@ -258,7 +258,7 @@ export default function AssignInterviewPage() {
             <CardTitle className="text-base">Schedule</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="scheduled_at">Date & Time</Label>
                 <Input

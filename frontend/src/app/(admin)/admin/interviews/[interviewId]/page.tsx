@@ -1,14 +1,16 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  CalendarClock,
   ClipboardCheck,
   FileText,
   XCircle,
 } from "lucide-react";
 
+import { RescheduleInterviewDialog } from "@/components/admin/reschedule-interview-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +39,8 @@ export default function InterviewDetailPage({
   const { interviewId } = use(params);
   const { data: iv, isLoading } = useInterviewDetail(interviewId);
   const cancel = useCancelInterview();
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -81,9 +85,24 @@ export default function InterviewDetailPage({
             <p className="text-sm text-muted-foreground">
               {iv.role ?? "N/A"} &middot; {iv.candidate_name}
             </p>
+            {successMessage ? (
+              <p className="mt-1 text-sm text-emerald-600 dark:text-emerald-400">
+                {successMessage}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {iv.can_reschedule ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRescheduleOpen(true)}
+            >
+              <CalendarClock className="mr-2 h-4 w-4" />
+              Reschedule
+            </Button>
+          ) : null}
           {canCancel ? (
             <Button
               variant="destructive"
@@ -126,6 +145,25 @@ export default function InterviewDetailPage({
             </Row>
             <Row label="Duration">{formatDuration(iv.duration_minutes)}</Row>
             <Row label="Scheduled">{formatDateTime(iv.scheduled_at)}</Row>
+            {iv.original_scheduled_at ? (
+              <Row label="Original Schedule">
+                {formatDateTime(iv.original_scheduled_at)}
+              </Row>
+            ) : null}
+            {iv.rescheduled_at ? (
+              <Row label="Rescheduled">
+                {formatDateTime(iv.rescheduled_at)}
+                {iv.reschedule_count > 0
+                  ? ` · ${iv.reschedule_count} time${iv.reschedule_count === 1 ? "" : "s"}`
+                  : ""}
+              </Row>
+            ) : null}
+            {iv.rescheduled_by_name ? (
+              <Row label="Rescheduled By">{iv.rescheduled_by_name}</Row>
+            ) : null}
+            {iv.reschedule_reason ? (
+              <Row label="Reschedule Reason">{iv.reschedule_reason}</Row>
+            ) : null}
             <Row label="Started">{formatDateTime(iv.started_at)}</Row>
             <Row label="Completed">{formatDateTime(iv.completed_at)}</Row>
             <Row label="Timezone">{iv.timezone ?? "—"}</Row>
@@ -349,6 +387,15 @@ export default function InterviewDetailPage({
           </CardContent>
         </Card>
       ) : null}
+
+      <RescheduleInterviewDialog
+        interview={iv}
+        open={rescheduleOpen}
+        onOpenChange={setRescheduleOpen}
+        onSuccess={(message) => {
+          setSuccessMessage(message);
+        }}
+      />
     </div>
   );
 }

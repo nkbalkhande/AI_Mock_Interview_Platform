@@ -38,6 +38,7 @@ class InterviewStatus(StrEnum):
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
+    RESCHEDULED = "RESCHEDULED"
 
 
 class SessionStatus(StrEnum):

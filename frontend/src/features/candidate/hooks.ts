@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  getAssignedResultDetail,
   getAssignedResults,
   getDashboard,
   getInterviewHistory,
@@ -15,6 +16,7 @@ import {
   uploadProfilePhoto,
 } from "./api";
 import type {
+  AssignedResultDetail,
   AssignedResultListResponse,
   CandidateProfileResponse,
   CandidateProfileUpdateRequest,
@@ -42,6 +44,8 @@ export const candidateKeys = {
     [...candidateKeys.all, "practice-results", page, pageSize] as const,
   assignedResults: (page: number, pageSize: number) =>
     [...candidateKeys.all, "assigned-results", page, pageSize] as const,
+  assignedResultDetail: (sessionId: string) =>
+    [...candidateKeys.all, "assigned-result", sessionId] as const,
   interviewHistory: (
     page: number,
     pageSize: number,
@@ -139,6 +143,15 @@ export function useAssignedResults(page = 1, pageSize = 20) {
   return useQuery<AssignedResultListResponse, ApiError>({
     queryKey: candidateKeys.assignedResults(page, pageSize),
     queryFn: () => getAssignedResults(page, pageSize),
+  });
+}
+
+/** Result of a single assigned interview session (pending or published). */
+export function useAssignedResultDetail(sessionId: string | null) {
+  return useQuery<AssignedResultDetail, ApiError>({
+    queryKey: candidateKeys.assignedResultDetail(sessionId ?? ""),
+    queryFn: () => getAssignedResultDetail(sessionId!),
+    enabled: !!sessionId,
   });
 }
 

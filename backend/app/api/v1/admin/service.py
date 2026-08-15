@@ -26,6 +26,8 @@ from app.api.v1.admin.schemas import (
     InterviewDetailResponse,
     InterviewListItem,
     InterviewListResponse,
+    RescheduleInterviewRequest,
+    RescheduleInterviewResponse,
     JobRoleItem,
     QuestionEvaluationDetail,
     RecentActivityItem,
@@ -40,6 +42,13 @@ from app.api.v1.admin.schemas import (
     UserListResponse,
 )
 from app.core.config import settings
+from app.core.exceptions import (
+    BusinessRuleError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
+from app.core.logging import get_logger
 from app.models.final_decision import FinalDecision
 from app.models.interview import Interview
 from app.models.interview_evaluation import InterviewEvaluation
@@ -55,6 +64,8 @@ from app.repositories.interview_session_repository import InterviewSessionReposi
 from app.repositories.job_role_repository import JobRoleRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.user_repository import UserRepository
+
+logger = get_logger(__name__)
 
 
 def _coerce_str_list(value: object) -> list[str]:
@@ -269,6 +280,8 @@ class AdminService:
         interview_type: str | None = None,
         search: str | None = None,
     ) -> InterviewListResponse:
+        await self.interviews.expire_overdue_assigned()
+        await self.session.commit()
         total = await self.interviews.admin_count_filtered(
             status=status, interview_type=interview_type, search=search
         )
@@ -312,6 +325,8 @@ class AdminService:
     async def get_interview_detail(
         self, interview_id: uuid.UUID
     ) -> InterviewDetailResponse | None:
+        await self.interviews.expire_overdue_assigned()
+        await self.session.commit()
         iv = await self.interviews.admin_get_detail(interview_id)
         if iv is None:
             return None
@@ -457,6 +472,14 @@ class AdminService:
             resume_file_name=resume_version.file_name if resume_version else None,
             resume_file_path=resume_version.file_path if resume_version else None,
             events=detail_events,
+            original_scheduled_at=iv.original_scheduled_at,
+            rescheduled_at=iv.rescheduled_at,
+            reschedule_count=iv.reschedule_count or 0,
+            reschedule_reason=iv.reschedule_reason,
+            rescheduled_by_name=(
+                iv.rescheduled_by_user.full_name if iv.rescheduled_by_user else None
+            ),
+            can_reschedule=iv.interview_type == "ASSIGNED" and iv.status == "EXPIRED",
         )
 
     async def assign_interview(
@@ -591,6 +614,125 @@ class AdminService:
         await self.session.commit()
 
         return await self.get_interview_detail(interview_id)
+
+    async def reschedule_interview(
+        self,
+        interview_id: uuid.UUID,
+        request: RescheduleInterviewRequest,
+        admin: User,
+    ) -> RescheduleInterviewResponse:
+        await self.interviews.expire_overdue_assigned()
+        iv = await self.interviews.admin_get_detail(interview_id)
+        if iv is None:
+            raise NotFoundError("Interview not found.")
+        if iv.interview_type != "ASSIGNED":
+            raise BusinessRuleError("Only assigned interviews can be rescheduled.")
+        if iv.status != "EXPIRED":
+            raise BusinessRuleError(
+                "Only missed interviews can be rescheduled."
+            )
+
+        new_scheduled = request.new_scheduled_at
+        if new_scheduled.tzinfo is None:
+            new_scheduled = new_scheduled.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if new_scheduled <= now:
+            raise ValidationError("New interview date/time cannot be in the past.")
+
+        duration = request.duration_minutes or iv.duration_minutes
+        tz_name = (request.timezone or iv.timezone or "UTC").strip() or "UTC"
+        access_start = new_scheduled - timedelta(
+            minutes=settings.interview.access_open_minutes_before
+        )
+        access_end = new_scheduled + timedelta(
+            minutes=duration + settings.interview.access_close_minutes_after_duration
+        )
+        if await self.interviews.has_schedule_conflict(
+            candidate_id=iv.candidate_id,
+            access_start=access_start,
+            access_end=access_end,
+            exclude_interview_id=iv.id,
+        ):
+            raise ConflictError(
+                "The new time overlaps another assigned interview for this candidate."
+            )
+
+        previous_scheduled = iv.scheduled_at
+        if iv.original_scheduled_at is None:
+            iv.original_scheduled_at = previous_scheduled
+        iv.scheduled_at = new_scheduled
+        iv.timezone = tz_name
+        iv.duration_minutes = duration
+        iv.access_start_at = access_start
+        iv.access_end_at = access_end
+        iv.status = "RESCHEDULED"
+        iv.rescheduled_at = now
+        iv.reschedule_count = int(iv.reschedule_count or 0) + 1
+        iv.reschedule_reason = (request.reason or "").strip() or None
+        iv.rescheduled_by = admin.id
+        await self.session.flush()
+
+        await self.events.record(
+            interview_id=iv.id,
+            session_id=None,
+            event_type="INTERVIEW_RESCHEDULED",
+            actor_user_id=admin.id,
+            metadata={
+                "previous_scheduled_at": (
+                    previous_scheduled.isoformat() if previous_scheduled else None
+                ),
+                "new_scheduled_at": new_scheduled.isoformat(),
+                "original_scheduled_at": (
+                    iv.original_scheduled_at.isoformat()
+                    if iv.original_scheduled_at
+                    else None
+                ),
+                "reason": iv.reschedule_reason,
+                "reschedule_count": iv.reschedule_count,
+                "timezone": tz_name,
+                "duration_minutes": duration,
+            },
+        )
+
+        notification_sent = False
+        if request.notify_candidate:
+            try:
+                role = iv.role_name_snapshot or "assigned"
+                when = new_scheduled.strftime("%d %B %Y at %I:%M %p")
+                interview_link = f"/upcoming-interviews/{iv.id}"
+                notification = Notification(
+                    user_id=iv.candidate_id,
+                    type="INTERVIEW_RESCHEDULED",
+                    title="Interview Rescheduled",
+                    message=(
+                        f"Your {role} interview has been rescheduled to "
+                        f"{when} {tz_name}. Status: Rescheduled. "
+                        f"Open: {interview_link}"
+                    ),
+                    reference_type="interview",
+                    reference_id=iv.id,
+                )
+                self.session.add(notification)
+                await self.session.flush()
+                notification_sent = True
+            except Exception:  # noqa: BLE001 - reschedule must survive notify failure
+                logger.exception(
+                    "Failed to notify candidate %s about reschedule of %s",
+                    iv.candidate_id,
+                    iv.id,
+                )
+
+        await self.session.commit()
+        return RescheduleInterviewResponse(
+            success=True,
+            message="Interview rescheduled successfully",
+            interview_id=iv.id,
+            status=iv.status,
+            scheduled_at=new_scheduled,
+            original_scheduled_at=iv.original_scheduled_at,
+            reschedule_count=iv.reschedule_count,
+            notification_sent=notification_sent,
+        )
 
     # ------------------------------------------------------------------
     # Evaluations
@@ -873,6 +1015,10 @@ class AdminService:
             ),
             answered_count=answered,
             total_questions=total_qs,
+            timezone=iv.timezone,
+            original_scheduled_at=iv.original_scheduled_at,
+            reschedule_count=iv.reschedule_count or 0,
+            can_reschedule=iv.interview_type == "ASSIGNED" and iv.status == "EXPIRED",
         )
 
     @staticmethod
@@ -885,7 +1031,9 @@ class AdminService:
         if interview_status == "CANCELLED":
             return "Cancelled"
         if interview_status == "EXPIRED":
-            return "Expired"
+            return "Missed"
+        if interview_status == "RESCHEDULED":
+            return "Rescheduled"
         if interview_status in ("SUBMITTED", "AI_EVALUATED", "ADMIN_REVIEW"):
             return "Evaluating"
         if interview_status == "IN_PROGRESS":
@@ -898,8 +1046,8 @@ class AdminService:
             return "Abandoned"
         if session_status == "PAUSED":
             return "Paused"
-        if interview_status in ("ASSIGNED", "SCHEDULED", "AVAILABLE"):
-            return "Not Started"
+        if interview_status in ("ASSIGNED", "SCHEDULED", "AVAILABLE", "RESCHEDULED"):
+            return "Not Started" if interview_status != "RESCHEDULED" else "Rescheduled"
         return interview_status.replace("_", " ").title()
 
     @staticmethod
@@ -927,6 +1075,11 @@ class AdminService:
 
 def _format_event(event: InterviewEvent) -> str:
     """Human-readable description for a recent-activity row."""
+    if event.event_type == "INTERVIEW_RESCHEDULED":
+        reason = (event.meta or {}).get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return f"Rescheduled by Admin — {reason.strip()}"
+        return "Rescheduled by Admin"
     labels = {
         "INTERVIEW_CREATED": "Interview created",
         "INTERVIEW_ASSIGNED": "Interview assigned",

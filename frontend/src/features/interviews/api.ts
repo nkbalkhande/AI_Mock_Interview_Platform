@@ -41,6 +41,16 @@ export async function startRolePractice(
   return data;
 }
 
+/** POST /candidate/interviews/assigned/{id}/start — create or resume session. */
+export async function startAssignedInterview(
+  interviewId: string,
+): Promise<StartPracticeInterviewResponse> {
+  const { data } = await apiClient.post<StartPracticeInterviewResponse>(
+    `/candidate/interviews/assigned/${interviewId}/start`,
+  );
+  return data;
+}
+
 /** GET /candidate/interviews/sessions/{id} — refresh-safe player state. */
 export async function getSessionState(
   sessionId: string,

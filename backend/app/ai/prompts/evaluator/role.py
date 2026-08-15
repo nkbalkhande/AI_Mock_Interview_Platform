@@ -14,7 +14,7 @@ from app.ai.prompts.evaluator.base import (
     SHARED_USER_INSTRUCTIONS,
 )
 
-ROLE_EVALUATOR_VERSION = "role_evaluator_v1"
+ROLE_EVALUATOR_VERSION = "role_evaluator_v2"
 
 _SYSTEM = (
     """You are a highly experienced Senior Recruiter and Technical Interview Evaluator
@@ -107,6 +107,9 @@ Candidate designation:
 
 Candidate experience:
 {candidate_experience}
+
+Target experience range for this interview:
+{required_experience}
 
 Resume:
 {resume_text}

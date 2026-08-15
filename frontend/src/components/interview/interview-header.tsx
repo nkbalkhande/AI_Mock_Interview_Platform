@@ -39,18 +39,18 @@ export function InterviewHeader({ interview, className }: InterviewHeaderProps) 
         </Link>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
           {isPractice ? (
             <Sparkles className="h-4 w-4" />
           ) : (
             <FileText className="h-4 w-4" />
           )}
         </span>
-        <div className="flex flex-col">
-          <h1 className="text-lg font-semibold text-foreground">
+        <div className="flex min-w-0 flex-col">
+          <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
             {interview.role_name ?? "Practice Interview"}
           </h1>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <Badge variant="secondary">{badgeLabel}</Badge>
             <span>Duration: {interview.duration_minutes} min</span>
           </div>

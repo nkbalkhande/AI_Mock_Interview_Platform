@@ -64,7 +64,7 @@ export function CodingEditor({
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <label className="text-sm font-medium text-foreground">
           Your solution
         </label>
@@ -84,9 +84,9 @@ export function CodingEditor({
           </select>
         </label>
       </div>
-      <div className="overflow-hidden rounded-md border border-input">
+      <div className="h-[280px] overflow-hidden rounded-md border border-input sm:h-[360px]">
         <MonacoEditor
-          height="360px"
+          height="100%"
           language={language}
           value={value}
           onChange={(v) => onValueChange(v ?? "")}

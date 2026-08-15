@@ -141,6 +141,10 @@ class InterviewListItem(BaseModel):
     admin_decision: str | None = None
     answered_count: int = 0
     total_questions: int = 0
+    timezone: str | None = None
+    original_scheduled_at: datetime | None = None
+    reschedule_count: int = 0
+    can_reschedule: bool = False
 
 
 class InterviewListResponse(BaseModel):
@@ -209,6 +213,31 @@ class InterviewDetailResponse(BaseModel):
     resume_file_name: str | None = None
     resume_file_path: str | None = None
     events: list[InterviewDetailEvent] = Field(default_factory=list)
+    original_scheduled_at: datetime | None = None
+    rescheduled_at: datetime | None = None
+    reschedule_count: int = 0
+    reschedule_reason: str | None = None
+    rescheduled_by_name: str | None = None
+    can_reschedule: bool = False
+
+
+class RescheduleInterviewRequest(BaseModel):
+    new_scheduled_at: datetime
+    reason: str | None = Field(default=None, max_length=2000)
+    notify_candidate: bool = True
+    duration_minutes: int | None = Field(default=None, gt=0, le=180)
+    timezone: str | None = Field(default=None, max_length=100)
+
+
+class RescheduleInterviewResponse(BaseModel):
+    success: bool = True
+    message: str
+    interview_id: uuid.UUID
+    status: str
+    scheduled_at: datetime
+    original_scheduled_at: datetime | None = None
+    reschedule_count: int
+    notification_sent: bool = False
 
 
 class AssignInterviewRequest(BaseModel):

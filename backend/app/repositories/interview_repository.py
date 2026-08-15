@@ -10,17 +10,33 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import func, or_, select
+from datetime import datetime, timezone
+
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import selectinload
 
 from app.models.interview import Interview
+from app.models.interview_question import InterviewQuestion
+from app.models.interview_session import InterviewSession
 from app.models.user import User
 from app.repositories.base import BaseRepository
 
-# Statuses shown as "upcoming" in the candidate's dashboard. Excludes anything
-# already started/finished/cancelled/expired. DRAFT is admin-side and shouldn't
-# leak to candidates before an admin publishes it (moves it to ASSIGNED+).
-_UPCOMING_STATUSES: tuple[str, ...] = ("ASSIGNED", "SCHEDULED", "AVAILABLE")
+# Statuses shown as "upcoming" in the candidate's dashboard. Includes
+# IN_PROGRESS so a candidate who already joined can rejoin from the list.
+# DRAFT is admin-side and shouldn't leak before an admin publishes it.
+_UPCOMING_STATUSES: tuple[str, ...] = (
+    "ASSIGNED",
+    "SCHEDULED",
+    "AVAILABLE",
+    "IN_PROGRESS",
+    "RESCHEDULED",
+)
+_STARTABLE_ASSIGNED_STATUSES: tuple[str, ...] = (
+    "ASSIGNED",
+    "SCHEDULED",
+    "AVAILABLE",
+    "RESCHEDULED",
+)
 
 # Statuses that represent a submitted interview (candidate side is done).
 _COMPLETED_STATUSES: tuple[str, ...] = (
@@ -97,6 +113,85 @@ class InterviewRepository(BaseRepository[Interview]):
             )
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def get_owned_for_start(
+        self, interview_id: uuid.UUID, candidate_id: uuid.UUID
+    ) -> Interview | None:
+        """Lock an owned assigned interview so start/resume is serialized.
+
+        Eager-loads the snapshotted resume and existing sessions (with
+        questions + answers) so ``start_assigned`` can resume without a
+        lazy load under asyncpg. ``None`` means missing or not yours.
+        """
+        stmt = (
+            select(Interview)
+            .where(
+                Interview.id == interview_id,
+                Interview.candidate_id == candidate_id,
+            )
+            .options(
+                selectinload(Interview.resume_version),
+                selectinload(Interview.sessions)
+                .selectinload(InterviewSession.questions)
+                .selectinload(InterviewQuestion.answer),
+            )
+            .with_for_update(of=Interview)
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def expire_overdue_assigned(self) -> int:
+        """Mark assigned interviews whose access window closed as EXPIRED.
+
+        Skips interviews that already have a started/submitted session so an
+        in-progress attempt is never treated as a no-show.
+        """
+        now = datetime.now(timezone.utc)
+        started = select(InterviewSession.interview_id).where(
+            InterviewSession.status.in_(
+                (
+                    "IN_PROGRESS",
+                    "PAUSED",
+                    "SUBMITTED",
+                    "EVALUATING",
+                    "EVALUATED",
+                    "COMPLETED",
+                )
+            )
+        )
+        stmt = (
+            update(Interview)
+            .where(
+                Interview.interview_type == "ASSIGNED",
+                Interview.status.in_(_STARTABLE_ASSIGNED_STATUSES),
+                Interview.access_end_at.is_not(None),
+                Interview.access_end_at < now,
+                Interview.id.not_in(started),
+            )
+            .values(status="EXPIRED")
+        )
+        result = await self.session.execute(stmt)
+        return int(result.rowcount or 0)
+
+    async def has_schedule_conflict(
+        self,
+        *,
+        candidate_id: uuid.UUID,
+        access_start: datetime,
+        access_end: datetime,
+        exclude_interview_id: uuid.UUID,
+    ) -> bool:
+        """True when another active assigned interview overlaps the window."""
+        stmt = select(func.count(Interview.id)).where(
+            Interview.candidate_id == candidate_id,
+            Interview.id != exclude_interview_id,
+            Interview.interview_type == "ASSIGNED",
+            Interview.status.in_((*_STARTABLE_ASSIGNED_STATUSES, "IN_PROGRESS")),
+            Interview.access_start_at.is_not(None),
+            Interview.access_end_at.is_not(None),
+            Interview.access_start_at < access_end,
+            Interview.access_end_at > access_start,
+        )
+        return int((await self.session.execute(stmt)).scalar_one()) > 0
 
     async def list_recent_completed(
         self,
@@ -243,7 +338,9 @@ class InterviewRepository(BaseRepository[Interview]):
     async def admin_count_scheduled_upcoming(self) -> int:
         now = func.now()
         stmt = select(func.count(Interview.id)).where(
-            Interview.status.in_(("ASSIGNED", "SCHEDULED", "AVAILABLE")),
+            Interview.status.in_(
+                ("ASSIGNED", "SCHEDULED", "AVAILABLE", "RESCHEDULED")
+            ),
             Interview.scheduled_at.is_not(None),
             Interview.scheduled_at > now,
         )
@@ -296,6 +393,7 @@ class InterviewRepository(BaseRepository[Interview]):
             .options(
                 selectinload(Interview.candidate),
                 selectinload(Interview.assigned_by_user),
+                selectinload(Interview.rescheduled_by_user),
                 selectinload(Interview.resume_version),
                 selectinload(Interview.events),
             )
@@ -357,7 +455,9 @@ class InterviewRepository(BaseRepository[Interview]):
             elif status == "COMPLETED_GROUP":
                 stmt = stmt.where(Interview.status.in_(_COMPLETED_STATUSES))
             elif status == "CANCELLED_GROUP":
-                stmt = stmt.where(Interview.status.in_(("CANCELLED", "EXPIRED")))
+                stmt = stmt.where(Interview.status == "CANCELLED")
+            elif status == "MISSED_GROUP":
+                stmt = stmt.where(Interview.status == "EXPIRED")
             else:
                 stmt = stmt.where(Interview.status == status)
         if interview_type:

@@ -2,7 +2,9 @@
 
 The JD-based practice interview flow surfaces here as a small REST surface:
 
-    POST   /candidate/interviews/practice/jd-based   → start
+    POST   /candidate/interviews/practice/jd-based   → start practice
+    POST   /candidate/interviews/practice/role-based → start practice
+    POST   /candidate/interviews/assigned/{id}/start → start/resume assigned
     GET    /candidate/interviews/sessions/{id}       → refresh-safe state
     POST   /candidate/interviews/sessions/{id}/answers → text answer + next Q
     POST   /candidate/interviews/sessions/{id}/coding-submissions → coding + next Q
@@ -49,6 +51,7 @@ from app.services.interviews.evaluator import InterviewEvaluator
 from app.services.interviews.lifecycle_service import (
     InterviewLifecycleService,
     SessionState,
+    StartedInterview,
 )
 from app.services.interviews.question_planner import JdQuestionPlanner
 from infrastructure.database.session import session_scope
@@ -113,21 +116,7 @@ async def start_jd_practice(
         job_description=payload.job_description,
         duration_minutes=payload.duration_minutes,
     )
-    return StartPracticeInterviewResponse(
-        interview=InterviewSummary(
-            id=started.interview_id,
-            interview_type="PRACTICE",
-            practice_type="JD_BASED",
-            role_name=None,
-            duration_minutes=started.duration_minutes,
-            status="IN_PROGRESS",
-            started_at=None,
-        ),
-        session_id=started.session_id,
-        total_questions=started.total_questions,
-        current_question_number=started.first_question.question_number,
-        current_question=_to_current_question(started.first_question),
-    )
+    return _started_to_response(started, interview_type="PRACTICE", practice_type="JD_BASED")
 
 
 @router.get("/job-roles", response_model=list[JobRoleResponse])
@@ -158,20 +147,40 @@ async def start_role_practice(
         custom_skills=payload.custom_skills,
         duration_minutes=payload.duration_minutes,
     )
-    return StartPracticeInterviewResponse(
-        interview=InterviewSummary(
-            id=started.interview_id,
-            interview_type="PRACTICE",
-            practice_type="ROLE_BASED",
-            role_name=started.role_name,
-            duration_minutes=started.duration_minutes,
-            status="IN_PROGRESS",
-            started_at=None,
-        ),
-        session_id=started.session_id,
-        total_questions=started.total_questions,
-        current_question_number=started.first_question.question_number,
-        current_question=_to_current_question(started.first_question),
+    return _started_to_response(
+        started,
+        interview_type="PRACTICE",
+        practice_type="ROLE_BASED",
+        role_name=started.role_name,
+    )
+
+
+@router.post(
+    "/assigned/{interview_id}/start",
+    response_model=StartPracticeInterviewResponse,
+    status_code=201,
+)
+async def start_assigned_interview(
+    interview_id: uuid.UUID,
+    current_user: User = Depends(require_roles(RoleName.CANDIDATE)),
+    service: InterviewLifecycleService = Depends(get_lifecycle_service),
+) -> StartPracticeInterviewResponse:
+    """Create (or resume) a session for an admin-assigned interview.
+
+    The interview row already exists from assignment. This endpoint is what
+    actually opens the player: it enforces the access window, snapshots
+    planner state from the frozen JD/resume, and returns a ``session_id``.
+    Re-joining mid-interview is idempotent.
+    """
+    started = await service.start_assigned(
+        candidate=current_user,
+        interview_id=interview_id,
+    )
+    return _started_to_response(
+        started,
+        interview_type="ASSIGNED",
+        practice_type=None,
+        role_name=started.role_name,
     )
 
 
@@ -326,6 +335,30 @@ async def _run_evaluation_in_background(session_id: uuid.UUID) -> None:
         logger.exception(
             "Background evaluation failed for session %s", session_id
         )
+
+
+def _started_to_response(
+    started: StartedInterview,
+    *,
+    interview_type: str,
+    practice_type: str | None,
+    role_name: str | None = None,
+) -> StartPracticeInterviewResponse:
+    return StartPracticeInterviewResponse(
+        interview=InterviewSummary(
+            id=started.interview_id,
+            interview_type=interview_type,
+            practice_type=practice_type,
+            role_name=role_name,
+            duration_minutes=started.duration_minutes,
+            status="IN_PROGRESS",
+            started_at=None,
+        ),
+        session_id=started.session_id,
+        total_questions=started.total_questions,
+        current_question_number=started.first_question.question_number,
+        current_question=_to_current_question(started.first_question),
+    )
 
 
 def _to_current_question(question: InterviewQuestion) -> CurrentQuestion:

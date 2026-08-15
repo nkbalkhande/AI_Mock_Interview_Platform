@@ -179,7 +179,7 @@ export default function AdminDashboardPage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+                    className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                   >
                     <div className="min-w-0 flex-1">
                       {href ? (
@@ -200,7 +200,7 @@ export default function AdminDashboardPage() {
                         </p>
                       ) : null}
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                       <Badge variant="outline" className="text-xs">
                         {item.event_type.replace(/_/g, " ")}
                       </Badge>

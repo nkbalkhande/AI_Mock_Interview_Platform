@@ -32,6 +32,18 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export interface SendEmailOtpResponse {
+  success: boolean;
+  message: string;
+  cooldown_seconds: number;
+}
+
+export interface VerifyEmailResponse {
+  success: boolean;
+  verified: boolean;
+  message: string;
+}
+
 /** Normalized error shape produced by the axios response interceptor. */
 export interface ApiError {
   code: string;

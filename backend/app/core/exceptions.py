@@ -68,6 +68,12 @@ class BusinessRuleError(AppException):
     message = "The operation violates a business rule."
 
 
+class RateLimitError(AppException):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    error_code = "rate_limited"
+    message = "Too many requests. Please try again shortly."
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def _handle_app_exception(_: Request, exc: AppException) -> JSONResponse:

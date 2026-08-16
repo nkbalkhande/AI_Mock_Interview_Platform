@@ -1,6 +1,13 @@
 import { apiClient } from "@/lib/api-client";
 
-import type { AuthUser, LoginInput, LoginResponse, RegisterInput } from "./types";
+import type {
+  AuthUser,
+  LoginInput,
+  LoginResponse,
+  RegisterInput,
+  SendEmailOtpResponse,
+  VerifyEmailResponse,
+} from "./types";
 
 /**
  * POST /auth/login — verifies credentials. On success the backend sets httpOnly
@@ -56,4 +63,23 @@ export async function getMe(): Promise<AuthUser> {
  */
 export async function logout(): Promise<void> {
   await apiClient.post("/auth/logout");
+}
+
+export async function sendEmailOtp(email: string): Promise<SendEmailOtpResponse> {
+  const { data } = await apiClient.post<SendEmailOtpResponse>(
+    "/auth/send-email-otp",
+    { email },
+  );
+  return data;
+}
+
+export async function verifyEmailOtp(
+  email: string,
+  otp: string,
+): Promise<VerifyEmailResponse> {
+  const { data } = await apiClient.post<VerifyEmailResponse>("/auth/verify-email", {
+    email,
+    otp,
+  });
+  return data;
 }

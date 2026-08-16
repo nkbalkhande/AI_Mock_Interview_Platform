@@ -8,6 +8,7 @@ PyJWT and are signed with the symmetric ``JWT_SECRET_KEY``.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -95,6 +96,35 @@ def decode_token(token: str) -> dict[str, Any]:
 def generate_refresh_token() -> str:
     """Generate a cryptographically-random opaque refresh token."""
     return secrets.token_urlsafe(48)
+
+
+def hash_otp(email: str, otp: str) -> str:
+    """HMAC-SHA256 of ``email:otp`` so OTPs are never stored in plaintext.
+
+    Bound to the email so a hash stolen from one row cannot be replayed
+    against a different address.
+    """
+    payload = f"{email.strip().lower()}:{otp.strip()}"
+    return hmac.new(
+        settings.JWT_SECRET_KEY.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def verify_otp(email: str, otp: str, otp_hash: str) -> bool:
+    """Constant-time compare of a submitted OTP against the stored hash."""
+    if not otp_hash:
+        return False
+    try:
+        return hmac.compare_digest(hash_otp(email, otp), otp_hash)
+    except (ValueError, TypeError):
+        return False
+
+
+def generate_email_otp() -> str:
+    """Return a cryptographically random 6-digit OTP (leading zeros kept)."""
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def hash_refresh_token(token: str) -> str:

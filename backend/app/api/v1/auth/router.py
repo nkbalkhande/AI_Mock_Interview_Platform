@@ -33,6 +33,10 @@ from app.api.v1.auth.schemas import (
     LoginRequest,
     LoginResponse,
     RegisterRequest,
+    SendEmailOtpRequest,
+    SendEmailOtpResponse,
+    VerifyEmailRequest,
+    VerifyEmailResponse,
 )
 from app.models.user import User
 from app.core.config import settings
@@ -42,6 +46,7 @@ from app.services.auth.auth_service import (
     AuthService,
     ResumeFileRef,
 )
+from app.services.auth.email_verification_service import EmailVerificationService
 from app.services.resumes.resume_ingestion_service import ingest_resume_version
 from app.services.storage.file_storage import FileStorageService, StoredFile
 
@@ -66,6 +71,12 @@ _PHOTO_CONTENT_TYPES = frozenset(
 
 def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(db)
+
+
+def get_email_verification_service(
+    db: AsyncSession = Depends(get_db),
+) -> EmailVerificationService:
+    return EmailVerificationService(db)
 
 
 def _set_auth_cookies(response: Response, result: AuthenticatedUser) -> None:
@@ -137,6 +148,26 @@ async def logout(response: Response) -> Response:
     response.delete_cookie(REFRESH_COOKIE_NAME, **common)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+@router.post("/send-email-otp", response_model=SendEmailOtpResponse)
+async def send_email_otp(
+    payload: SendEmailOtpRequest,
+    service: EmailVerificationService = Depends(get_email_verification_service),
+) -> SendEmailOtpResponse:
+    """Send a 6-digit registration OTP via Resend. Does not create an account."""
+    result = await service.send_otp(payload.email)
+    return SendEmailOtpResponse.model_validate(result)
+
+
+@router.post("/verify-email", response_model=VerifyEmailResponse)
+async def verify_email(
+    payload: VerifyEmailRequest,
+    service: EmailVerificationService = Depends(get_email_verification_service),
+) -> VerifyEmailResponse:
+    """Confirm a registration OTP. Required before POST /auth/register."""
+    result = await service.verify_otp(payload.email, payload.otp)
+    return VerifyEmailResponse.model_validate(result)
 
 
 @router.post("/login", response_model=LoginResponse)

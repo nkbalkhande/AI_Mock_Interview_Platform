@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { EmailVerificationField } from "@/features/auth/email-verification-field";
 import { useRegister } from "@/features/auth/hooks";
 import type { ApiError } from "@/features/auth/types";
 import {
@@ -57,10 +58,12 @@ export default function RegisterPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -88,8 +91,17 @@ export default function RegisterPage() {
     setPhotoError(file ? validateFile(file, PHOTO_TYPES, "Photo") : null);
   };
 
+  const emailValue = watch("email");
+
   const onSubmit = (values: RegisterFormValues) => {
     setFormError(null);
+
+    if (!emailVerified) {
+      setFormError(
+        "Please verify your email address before completing registration.",
+      );
+      return;
+    }
 
     if (!resumeFile) {
       setResumeError("Please upload your resume");
@@ -176,20 +188,13 @@ export default function RegisterPage() {
               ) : null}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                aria-invalid={!!errors.email}
-                {...register("email")}
-              />
-              {errors.email ? (
-                <p className="text-xs text-destructive">{errors.email.message}</p>
-              ) : null}
-            </div>
+            <EmailVerificationField
+              email={emailValue}
+              emailError={errors.email?.message}
+              registerEmail={register("email")}
+              verified={emailVerified}
+              onVerifiedChange={setEmailVerified}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>

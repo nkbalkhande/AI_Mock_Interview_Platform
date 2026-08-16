@@ -9,6 +9,7 @@ from __future__ import annotations
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.audit_log import AuditLog
 from app.models.coding_submission import CodingSubmission
+from app.models.email_verification import EmailVerification
 from app.models.final_decision import FinalDecision
 from app.models.interview import Interview
 from app.models.interview_answer import InterviewAnswer
@@ -34,6 +35,7 @@ __all__ = [
     "UUIDPrimaryKeyMixin",
     "AuditLog",
     "CodingSubmission",
+    "EmailVerification",
     "FinalDecision",
     "Interview",
     "InterviewAnswer",

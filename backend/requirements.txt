@@ -14,12 +14,6 @@ asyncpg==0.30.0
 psycopg[binary]==3.2.3
 alembic==1.14.0
 
-# Cache / broker
-redis==5.2.1
-
-# Background jobs
-celery==5.4.0
-
 # Security / auth
 bcrypt==5.0.0
 pyjwt==2.10.1
@@ -37,6 +31,9 @@ litellm==1.59.12
 
 # Resume parsing
 docling==2.14.0
+
+# Email
+brevo-python==5.0.1
 
 # Utilities
 python-dotenv==1.0.1

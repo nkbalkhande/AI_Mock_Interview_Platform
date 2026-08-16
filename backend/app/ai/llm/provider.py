@@ -62,7 +62,7 @@ def credentials_for(model: str) -> dict[str, Any]:
         if not api_base:
             raise ValueError(
                 "Azure OpenAI is selected but AZURE_OPENAI_ENDPOINT is not set. "
-                "Add it to backend/.env."
+                "Add it to the repo-root .env."
             )
         creds["api_base"] = api_base
         creds["api_version"] = azure.api_version
@@ -121,6 +121,6 @@ def _require_key(provider: str, api_key: str | None) -> dict[str, Any]:
         }.get(provider, f"{provider.upper()}_API_KEY")
         raise ValueError(
             f"{provider} is selected in settings/llm.yaml but {env_name} "
-            "is not set. Add it to backend/.env."
+            "is not set. Add it to the repo-root .env."
         )
     return {"api_key": api_key}

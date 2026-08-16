@@ -1,15 +1,15 @@
 # =============================================================================
 # LLM switchboard — change the model here, then restart the backend.
 # LiteLLM reads the prefix and pulls the matching API key / endpoint from
-# backend/.env (see providers below). Do not put secrets in this file.
+# the repo-root `.env` (see providers below). Do not put secrets in this file.
 # =============================================================================
 
 provider: litellm
 
-# Uncomment exactly one chat model:
-model: openai/gpt-5
+# Active chat model. For Azure, use `azure/<deployment_name>`.
+model: azure/gpt4o-hre-asknova-aiops-devtest-uks01
+# model: openai/gpt-5
 # model: openai/gpt-4o
-# model: azure/gpt-4o
 # model: anthropic/claude-sonnet-4-5
 # model: gemini/gemini-2.0-flash
 
@@ -26,15 +26,16 @@ kwargs: {}
 
 embedding:
   provider: litellm
+  # Active embedding model. For Azure, use `azure/<deployment_name>`.
   # Must match vectordb.qdrant.dense_dim in settings/config.yaml (1536 for
   # text-embedding-3-small).
-  model: openai/text-embedding-3-small
-  # model: azure/text-embedding-3-small
+  model: azure/embedv3-hre-asknova-aiops-devtest-uks01
+  # model: openai/text-embedding-3-small
   dimensions: 1536
   timeout: 60
 
 # Connection details LiteLLM uses based on the model prefix.
-# API keys stay in backend/.env:
+# API keys stay in the repo-root `.env`:
 #   openai/     → OPENAI_API_KEY
 #   azure/      → AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT
 #   anthropic/  → ANTHROPIC_API_KEY
@@ -42,7 +43,7 @@ embedding:
 providers:
   openai: {}
   azure:
-    api_version: "2024-08-01-preview"
+    api_version: "2024-05-01-preview"
     # Optional override; otherwise AZURE_OPENAI_ENDPOINT from .env is used.
     api_base: null
   anthropic: {}

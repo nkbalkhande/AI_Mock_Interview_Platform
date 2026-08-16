@@ -45,10 +45,12 @@ def _point_id(resume_version_id: uuid.UUID, chunk_index: int) -> str:
 
 @lru_cache
 def get_qdrant_client() -> QdrantClient:
+    # Empty string from `.env` (`QDRANT_API_KEY=`) is falsy but not None;
+    # passing it triggers qdrant_client's "insecure connection" warning.
     return QdrantClient(
         host=settings.vectordb.qdrant.host,
         port=settings.vectordb.qdrant.port,
-        api_key=settings.QDRANT_API_KEY,
+        api_key=settings.QDRANT_API_KEY or None,
         https=settings.vectordb.qdrant.https,
     )
 

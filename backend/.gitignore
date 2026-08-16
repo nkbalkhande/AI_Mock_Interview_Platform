@@ -12,7 +12,7 @@ __pycache__/
 venv/
 env/
 
-# Environment / secrets
+# Environment / secrets (root .env is authoritative; nothing here should exist)
 .env
 *.local
 

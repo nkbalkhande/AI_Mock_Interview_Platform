@@ -7,7 +7,7 @@ __pycache__/
 .ruff_cache/
 .git/
 .gitignore
-.env
+# .env lives at repo root and is injected via docker-compose `env_file: ../.env`.
 tests/
 storage/resumes/*
 storage/profile_photos/*

@@ -1,7 +1,8 @@
 """Application configuration.
 
 Tunables are loaded from ``settings/config.yaml`` at the repo root.
-Secrets and local overrides come from environment variables / ``.env``.
+Secrets and local overrides come from environment variables / the repo-root
+``.env`` file.
 
 Import the singleton ``settings`` object everywhere instead of reading
 ``os.environ`` directly.
@@ -26,6 +27,7 @@ from pydantic_settings import (
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_YAML_PATH = _REPO_ROOT / "settings" / "config.yaml"
 LLM_YAML_PATH = _REPO_ROOT / "settings" / "llm.yaml"
+ENV_FILE_PATH = _REPO_ROOT / ".env"
 
 
 class AppSettings(BaseModel):
@@ -98,23 +100,26 @@ class PostgresSettings(BaseModel):
     echo: bool = False
 
 
-class RedisSettings(BaseModel):
-    host: str = "localhost"
-    port: int = 6379
-    db: int = 0
-
-
-class CelerySettings(BaseModel):
-    broker_url: str = "redis://localhost:6379/1"
-    result_backend: str = "redis://localhost:6379/2"
-
-
 class AuthSettings(BaseModel):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     access_cookie_name: str = "session"
     refresh_cookie_name: str = "refresh_token"
+
+
+class EmailSettings(BaseModel):
+    from_address: str = "balkhandenilesh1@gmail.com"
+    from_name: str = "AI Mock Interview"
+    # SMTP login from Brevo → SMTP & API. Defaults to from_address.
+    smtp_login: str | None = None
+
+
+class EmailVerificationSettings(BaseModel):
+    otp_ttl_minutes: int = 10
+    resend_cooldown_seconds: int = 60
+    max_attempts: int = 5
+    max_sends_per_hour: int = 5
 
 
 class StorageSettings(BaseModel):
@@ -223,7 +228,7 @@ class LlmYamlSettingsSource(PydanticBaseSettingsSource):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE_PATH),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -237,9 +242,11 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     vectordb: VectorDBSettings = Field(default_factory=VectorDBSettings)
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
-    redis: RedisSettings = Field(default_factory=RedisSettings)
-    celery: CelerySettings = Field(default_factory=CelerySettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    email: EmailSettings = Field(default_factory=EmailSettings)
+    email_verification: EmailVerificationSettings = Field(
+        default_factory=EmailVerificationSettings
+    )
     storage: StorageSettings = Field(default_factory=StorageSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     resume: ResumeSettings = Field(default_factory=ResumeSettings)
@@ -258,9 +265,9 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me-in-production"
     QDRANT_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
+    BREVO_API_KEY: str | None = None
     DATABASE_URL: str | None = None
     SYNC_DATABASE_URL: str | None = None
-    REDIS_URL: str | None = None
 
     @classmethod
     def settings_customise_sources(
@@ -327,15 +334,6 @@ class Settings(BaseSettings):
                 port=self.postgres.port,
                 path=self.postgres.db,
             )
-        )
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def redis_url(self) -> str:
-        if self.REDIS_URL:
-            return self.REDIS_URL
-        return (
-            f"redis://{self.redis.host}:{self.redis.port}/{self.redis.db}"
         )
 
     @property

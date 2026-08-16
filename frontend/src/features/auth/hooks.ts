@@ -6,13 +6,15 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/hooks/use-auth";
 import { ROUTES } from "@/lib/constants";
 
-import { getMe, login, logout, register } from "./api";
+import { getMe, login, logout, register, sendEmailOtp, verifyEmailOtp } from "./api";
 import type {
   ApiError,
   AuthUser,
   LoginInput,
   LoginResponse,
   RegisterInput,
+  SendEmailOtpResponse,
+  VerifyEmailResponse,
 } from "./types";
 
 const AUTH_ME_KEY = ["auth", "me"] as const;
@@ -111,6 +113,22 @@ export function useMe(options?: { enabled?: boolean }) {
  * Sign the user out: clear cookies server-side, wipe client cache + store,
  * then push to /login. Used by the profile dropdown.
  */
+export function useSendEmailOtp() {
+  return useMutation<SendEmailOtpResponse, ApiError, string>({
+    mutationFn: sendEmailOtp,
+  });
+}
+
+export function useVerifyEmailOtp() {
+  return useMutation<
+    VerifyEmailResponse,
+    ApiError,
+    { email: string; otp: string }
+  >({
+    mutationFn: ({ email, otp }) => verifyEmailOtp(email, otp),
+  });
+}
+
 export function useLogout() {
   const clear = useAuthStore((s) => s.clear);
   const queryClient = useQueryClient();

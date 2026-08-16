@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Route protection at the network boundary (Next.js 16 ``proxy.ts``).
+ * UX-only session cookie check. Authoritative RBAC stays on FastAPI.
  *
- * Lightweight UX guard only: cookie presence, then redirect. Authoritative
- * RBAC stays on the FastAPI backend. Public auth pages are excluded from
- * the matcher — Next.js 16.0.x can 404 those routes in ``next dev`` when
- * this file intercepts them (``/`` still works; ``/login`` does not).
+ * Next.js 16.0.x ``src/proxy.ts`` 404s ``/login`` and ``/register`` in
+ * ``next dev`` (home still works). ``middleware.ts`` does not have that bug.
  */
 const PUBLIC_PATHS = [
   "/",
@@ -18,7 +16,7 @@ const PUBLIC_PATHS = [
 
 const SESSION_COOKIE = "session";
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublic = PUBLIC_PATHS.some(

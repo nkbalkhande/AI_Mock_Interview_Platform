@@ -54,3 +54,24 @@ class AuthUser(BaseModel):
 
 class LoginResponse(BaseModel):
     user: AuthUser
+
+
+class SendEmailOtpRequest(BaseModel):
+    email: EmailStr
+
+
+class SendEmailOtpResponse(BaseModel):
+    success: bool
+    message: str
+    cooldown_seconds: int = 60
+
+
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class VerifyEmailResponse(BaseModel):
+    success: bool
+    verified: bool
+    message: str

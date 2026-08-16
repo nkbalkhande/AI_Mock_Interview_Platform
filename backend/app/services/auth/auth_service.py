@@ -23,6 +23,7 @@ from app.models.user_profile import UserProfile
 from app.models.user_role import UserRole
 from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
+from app.services.auth.email_verification_service import EmailVerificationService
 from app.services.auth.password_service import PasswordService
 from app.services.auth.token_service import IssuedTokens, TokenService
 
@@ -60,6 +61,7 @@ class AuthService:
         self.roles = RoleRepository(session)
         self.passwords = password_service or PasswordService()
         self.tokens = token_service or TokenService(session)
+        self.email_verification = EmailVerificationService(session)
 
     async def register(
         self,
@@ -92,6 +94,8 @@ class AuthService:
         if existing is not None:
             raise AlreadyExistsError("An account with this email already exists.")
 
+        verified = await self.email_verification.consume_verified(email)
+
         role = await self.roles.get_by_name(RoleName.CANDIDATE)
         if role is None:  # pragma: no cover - indicates missing role seed
             raise RuntimeError(
@@ -102,6 +106,8 @@ class AuthService:
             full_name=full_name,
             email=email,
             password_hash=self.passwords.hash(password),
+            email_verified=True,
+            email_verified_at=verified.verified_at,
         )
         # Attaching the Role object lets the response read `ur.role.name`
         # without an extra query, and cascade inserts the association row.
